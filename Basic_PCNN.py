@@ -6,7 +6,6 @@ from deepxde.backend import tf
 import tensorflow_probability as tfp
 import master_thesis_mitchell_functions as mtmf
 import matplotlib.pyplot as plt
-from function import Function
 
 # Constants
 mu = 1.32712440042e20 # gravitational parameter of Sun
