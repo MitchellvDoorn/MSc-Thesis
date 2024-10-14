@@ -3,7 +3,6 @@ import deepxde as dde
 import numpy as np
 # Import tf if using backend tensorflow.compat.v1 or tensorflow
 from deepxde.backend import tf
-import tensorflow_probability as tfp
 import master_thesis_mitchell_functions as mtmf
 import matplotlib.pyplot as plt
 
@@ -86,24 +85,6 @@ def pde(t, y):
         ]
 
 def my_constraint_layer(t, y):
-    '''
-    Mulitply the networks output with a time dependent function
-      which vanshises at t=0 and tfinal.
-    Mulitply initial state with a time dependent function
-      which vanshises at t>0.
-    Mulitply final state with a time dependent function
-      which vanshises at t<tfinal.
-    Transforms the control outputs
-    Transforms the mass output
-
-    Arguments:
-        t (tf.Tensor): network input (time)
-        y (tf.Tensor): last layers output
-
-    Returns:
-        output (tf.Tensor): This layers output
-
-    '''
 
     c1 = tf.math.exp(-a * (t - t0))
     c2 = 1 - tf.math.exp(-a * (t - t0)) - tf.math.exp(a * (t - tfinal/t_scale))
