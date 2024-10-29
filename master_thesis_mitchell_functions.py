@@ -1,3 +1,4 @@
+import deepxde as dde
 import tensorflow as tf
 import numpy as np
 # import matplotlib
@@ -7,252 +8,15 @@ import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-dpi_setting = 600
+dpi_setting = 400
+import tensorflow_probability as tfp
+import coordinate_transformations
+import verification
+from model_pcnn import ModelPCNN
+from datetime import datetime
+import os
+# from basic_pcnn import config, MU, m0, a, umax, isp, t0, tfinal, t_scale, length_scale, initial_state, final_state
 
-
-@tf.keras.utils.register_keras_serializable()
-class MyConstraintLayer(tf.keras.layers.Layer):
-    def __init__(self, time_grid, t0, tf_final, r0, rf, theta0, thetaf, v0r, vfr, v0theta, vftheta, m0, a, umax, **kwargs):
-        super(MyConstraintLayer, self).__init__(**kwargs)  # Accepting and passing additional arguments
-        self.time_grid = tf.cast(time_grid, tf.float32)
-        self.t0 = tf.cast(t0, tf.float32)
-        self.tf_final = tf.cast(tf_final, tf.float32)
-        self.r0 = tf.cast(r0, tf.float32)
-        self.rf = tf.cast(rf, tf.float32)
-        self.theta0 = tf.cast(theta0, tf.float32)
-        self.thetaf = tf.cast(thetaf, tf.float32)
-        self.v0r = tf.cast(v0r, tf.float32)
-        self.vfr = tf.cast(vfr, tf.float32)
-        self.v0theta = tf.cast(v0theta, tf.float32)
-        self.vftheta = tf.cast(vftheta, tf.float32)
-        self.m0 = tf.cast(m0, tf.float32)
-        self.a = tf.cast(a, tf.float32)
-        self.umax = tf.cast(umax, tf.float32)
-
-    def build(self, input_shape):
-        #self.kernel = self.add_weight("kernel", shape=[int(input_shape[-1]), self.num_outputs])
-        pass
-
-    def call(self, inputs):
-      Nr, Ntheta, Nvr, Nvtheta, Nu_phi, Nu_T, Nm = tf.split(inputs, num_or_size_splits=7, axis=-1)
-      t = tf.cast(tf.reshape(self.time_grid, (-1, 1)), tf.float32)
-
-      r = tf.exp(-self.a * (t - self.t0)) * self.r0 + (1 - tf.exp(-self.a * (t - self.t0)) - tf.exp(self.a * (t - self.tf_final))) * Nr + tf.exp(self.a * (t - self.tf_final)) * self.rf
-      theta = tf.exp(-self.a * (t - self.t0)) * self.theta0 + (1 - tf.exp(-self.a * (t - self.t0)) - tf.exp(self.a * (t - self.tf_final))) * Ntheta + tf.exp(self.a * (t - self.tf_final)) * self.thetaf
-      vr =     tf.exp(-self.a * (t - self.t0)) * self.v0r + (1 - tf.exp(-self.a * (t - self.t0)) - tf.exp(self.a * (t - self.tf_final))) * Nvr + tf.exp(self.a * (t - self.tf_final)) * self.vfr
-      vtheta = tf.exp(-self.a * (t - self.t0)) * self.v0theta + (1 - tf.exp(-self.a * (t - self.t0)) - tf.exp(self.a * (t - self.tf_final))) * Nvtheta + tf.exp(self.a * (t - self.tf_final)) * self.vftheta
-
-      u_phi = 2 * np.pi * tf.math.tanh(Nu_phi)
-      u_T = self.umax * tf.math.sigmoid(Nu_T)
-
-      ur = u_T*tf.math.sin(u_phi)
-      ut = u_T*tf.math.cos(u_phi)
-
-      m = self.m0 - (1 - tf.exp(-self.a * (t - self.t0))) * self.m0 * tf.math.sigmoid(Nm)
-      return tf.concat([r, theta, vr, vtheta, ur, ut, m], axis=-1)
-
-    def get_config(self):
-      config = super(MyConstraintLayer, self).get_config()
-      config.update({
-          'time_grid': self.time_grid.numpy().tolist(),  # Convert tensor to numpy, then to list
-          't0': self.t0.numpy().tolist(),
-          'tf_final': self.tf_final.numpy().tolist(),
-          'r0': self.r0.numpy().tolist(),
-          'rf': self.rf.numpy().tolist(),
-          'theta0': self.theta0.numpy().tolist(),
-          'thetaf': self.thetaf.numpy().tolist(),
-          'v0r': self.v0r.numpy().tolist(),
-          'vfr': self.vfr.numpy().tolist(),
-          'v0theta': self.v0theta.numpy().tolist(),
-          'vftheta': self.vftheta.numpy().tolist(),
-          'm0': self.m0.numpy().tolist(),
-          'a': self.a.numpy().tolist(),
-          'umax': self.umax.numpy().tolist()
-      })
-      return config
-
-    @classmethod
-    def from_config(cls, config):
-      config['time_grid'] = tf.convert_to_tensor(config['time_grid'], dtype=tf.float32)
-      config['t0'] = tf.convert_to_tensor(config['t0'], dtype=tf.float32)
-      config['tf_final'] = tf.convert_to_tensor(config['tf_final'], dtype=tf.float32)
-      config['r0'] = tf.convert_to_tensor(config['r0'], dtype=tf.float32)
-      config['rf'] = tf.convert_to_tensor(config['rf'], dtype=tf.float32)
-      config['theta0'] = tf.convert_to_tensor(config['theta0'], dtype=tf.float32)
-      config['thetaf'] = tf.convert_to_tensor(config['thetaf'], dtype=tf.float32)
-      config['v0r'] = tf.convert_to_tensor(config['v0r'], dtype=tf.float32)
-      config['vfr'] = tf.convert_to_tensor(config['vfr'], dtype=tf.float32)
-      config['v0theta'] = tf.convert_to_tensor(config['v0theta'], dtype=tf.float32)
-      config['vftheta'] = tf.convert_to_tensor(config['vftheta'], dtype=tf.float32)
-      config['m0'] = tf.convert_to_tensor(config['m0'], dtype=tf.float32)
-      config['a'] = tf.convert_to_tensor(config['a'], dtype=tf.float32)
-      config['umax'] = tf.convert_to_tensor(config['umax'], dtype=tf.float32)
-      return cls(**config)
-
-@tf.keras.utils.register_keras_serializable()
-def custom_loss_NOT_USED(true_states, predictions, time_grid_tensor, model, M, MU_scaled, Isp, g0, weight_dynamics, weight_mass, weight_objective):
-    # data loss
-    # data_loss_value = tf.reduce_mean(tf.abs(predictions - true_states))
-
-    # time derivatives
-    with tf.GradientTape(persistent=True) as tape:
-        tape.watch(time_grid_tensor)
-        predictions = model(time_grid_tensor)
-
-        # r_pred has shape (M+1,),    r_pred_dot has shape (M+1,1) even without reshaping r_pred to (M+1,1),    time_grid_tensor has shape (M+1,1)
-        r_pred      = tf.reshape(predictions[:, 0], [M+1,1])            ;  r_pred_dot       = tape.gradient(r_pred      , time_grid_tensor)
-        theta_pred  = tf.reshape(predictions[:, 1], [M+1,1])            ;  theta_pred_dot   = tape.gradient(theta_pred  , time_grid_tensor)
-        vr_pred     = tf.reshape(predictions[:, 2], [M+1,1])            ;  vr_pred_dot      = tape.gradient(vr_pred     , time_grid_tensor)
-        vtheta_pred = tf.reshape(predictions[:, 3], [M+1,1])            ;  vtheta_pred_dot  = tape.gradient(vtheta_pred , time_grid_tensor)
-        u_phi_pred  = tf.reshape(predictions[:, 4], [M+1,1])
-        u_T_pred    = tf.reshape(predictions[:, 5], [M+1,1])
-        m_pred      = tf.reshape(predictions[:, 6], [M+1,1])            ;  m_pred_dot       = tape.gradient(m_pred      , time_grid_tensor)
-
-    # physics losses
-    L_r =      tf.reduce_mean(tf.square(r_pred_dot - vr_pred))  # (M+1, 1) - (M+1) = (M+1,M+1)         (M+1, 1) - (M+1,1) = (M+1,1)
-    L_theta =  tf.reduce_mean(tf.square(theta_pred_dot - vtheta_pred / r_pred))
-    L_vr =     tf.reduce_mean(tf.square(vr_pred_dot - ( ((vtheta_pred ** 2) / r_pred) + (MU_scaled / (r_pred ** 2)) - (u_T_pred * tf.sin(u_phi_pred)) / m_pred) ) )
-    L_vtheta = tf.reduce_mean(tf.square(vtheta_pred_dot + ((vr_pred * vtheta_pred) / r_pred)                 - ((u_T_pred * tf.cos(u_phi_pred)) / m_pred) ) )
-
-    delta_t = time_grid_tensor[1:] - time_grid_tensor[:-1]
-    L_o = (1 / (Isp * g0)) * tf.reduce_sum(0.5 * (u_T_pred[:-1] - u_T_pred[1:]) * delta_t)
-
-    L_m = tf.reduce_mean(tf.square( m_pred_dot - (u_T_pred / (Isp * g0) ) ) )
-
-    physics_loss_value = weight_dynamics * (L_r + L_theta + L_vr + L_vtheta) + weight_mass * (L_m) + weight_objective * (L_o)
-
-    return physics_loss_value
-@tf.keras.utils.register_keras_serializable()
-def custom_loss_T_perturbed_NOT_USED(true_states, predictions, t0, t_final, model, M, MU_scaled, Isp, g0, weight_dynamics, weight_mass, weight_objective):
-    # data loss
-    # data_loss_value = tf.reduce_mean(tf.abs(predictions - true_states))
-
-    # create perturbed time grid
-    time_grid_perturbed = generate_training_batch(t0, t_final, M).reshape(-1, 1)
-    time_grid_perturbed_tensor = tf.convert_to_tensor(time_grid_perturbed, dtype=tf.float32)
-
-    # time derivatives
-    with tf.GradientTape(persistent=True) as tape:
-        time_grid_perturbed = generate_training_batch(t0, t_final, M).reshape(-1, 1)
-        time_grid_perturbed_tensor = tf.convert_to_tensor(time_grid_perturbed, dtype=tf.float32)
-        tape.watch(time_grid_perturbed_tensor)
-        predictions = model(time_grid_perturbed_tensor)
-
-        # r_pred has shape (M+1,),    r_pred_dot has shape (M+1,1) even without reshaping r_pred to (M+1,1),    time_grid_tensor has shape (M+1,1)
-        r_pred      = tf.reshape(predictions[:, 0], [M+1,1])            ;  r_pred_dot       = tape.gradient(r_pred      , time_grid_perturbed_tensor)
-        theta_pred  = tf.reshape(predictions[:, 1], [M+1,1])            ;  theta_pred_dot   = tape.gradient(theta_pred  , time_grid_perturbed_tensor)
-        vr_pred     = tf.reshape(predictions[:, 2], [M+1,1])            ;  vr_pred_dot      = tape.gradient(vr_pred     , time_grid_perturbed_tensor)
-        vtheta_pred = tf.reshape(predictions[:, 3], [M+1,1])            ;  vtheta_pred_dot  = tape.gradient(vtheta_pred , time_grid_perturbed_tensor)
-        u_phi_pred  = tf.reshape(predictions[:, 4], [M+1,1])
-        u_T_pred    = tf.reshape(predictions[:, 5], [M+1,1])
-        m_pred      = tf.reshape(predictions[:, 6], [M+1,1])            ;  m_pred_dot       = tape.gradient(m_pred      , time_grid_perturbed_tensor)
-
-    # physics losses
-    L_r =      tf.reduce_mean(tf.square(r_pred_dot - vr_pred))  # (M+1, 1) - (M+1) = (M+1,M+1)         (M+1, 1) - (M+1,1) = (M+1,1)
-    L_theta =  tf.reduce_mean(tf.square(theta_pred_dot - vtheta_pred / r_pred))
-    L_vr =     tf.reduce_mean(tf.square(vr_pred_dot - ( ((vtheta_pred ** 2) / r_pred) + (MU_scaled / (r_pred ** 2)) - (u_T_pred * tf.sin(u_phi_pred)) / m_pred) ) )
-    L_vtheta = tf.reduce_mean(tf.square(vtheta_pred_dot + ((vr_pred * vtheta_pred) / r_pred)                 - ((u_T_pred * tf.cos(u_phi_pred)) / m_pred) ) )
-
-    delta_t = time_grid_perturbed_tensor[1:] - time_grid_perturbed_tensor[:-1]
-    L_o = (1 / (Isp * g0)) * tf.reduce_sum(0.5 * (u_T_pred[:-1] - u_T_pred[1:]) * delta_t)
-
-    L_m = tf.reduce_mean(tf.square( m_pred_dot - (u_T_pred / (Isp * g0) ) ) )
-
-    physics_loss_value = weight_dynamics * (L_r + L_theta + L_vr + L_vtheta) + weight_mass * (L_m) + weight_objective * (L_o)
-
-    return physics_loss_value
-
-### Learning rate schedules
-def learning_rate_schedule2000(epoch):
-    if epoch < 400:
-        return 1e-2
-    elif epoch < 900:
-        return 1e-3 # should be a float, not int
-    elif epoch <1000:
-        return 0.05
-    elif epoch < 1300:
-        return 1e-2
-    elif epoch < 1500:
-        return 1e-3
-    elif epoch < 1700:
-        return 1e-4
-    elif epoch < 1850:
-        return 1e-5
-    # elif epoch < 27000:
-    #     return 1e-4
-    # elif epoch < 31000:
-    #     return 5e-3  # Shaking phase 2
-    # elif epoch < 36000:
-    #     return 1e-4
-    # elif epoch < 40000:
-    #     return 5e-3  # Shaking phase 3
-    # elif epoch < 46000:
-    #     return 1e-4
-    else:
-        return 1e-6
-def learning_rate_schedule51000(epoch):
-    if epoch < 3000:
-        return 1e-2
-    elif epoch < 8000:
-        return 1e-3
-    elif epoch < 18000:
-        return 1e-4
-    elif epoch < 22000: # Shaking phase 1
-        return 5e-3
-    elif epoch < 27000:
-        return 1e-4
-    elif epoch < 31000: # Shaking phase 2
-        return 5e-3
-    elif epoch < 36000:
-        return 1e-4
-    elif epoch < 40000: # Shaking phase 3
-        return 5e-3
-    elif epoch < 45000:
-        return 1e-4
-    else:
-        return 1e-6
-def learning_rate_schedule35000(epoch):
-    if epoch < 3000:
-        return 1e-2
-    elif epoch < 5000:
-        return 1e-3
-    elif epoch < 8000:
-        return 1e-4
-    elif epoch < 12000: # Shaking phase 1
-        return 5e-3
-    elif epoch < 16000:
-        return 1e-4
-    elif epoch < 20000: # Shaking phase 2
-        return 5e-3
-    elif epoch < 23000:
-        return 1e-4
-    elif epoch < 26000: # Shaking phase 3
-        return 5e-3
-    elif epoch < 30000:
-        return 1e-4
-    else:
-        return 1e-6
-def learning_rate_schedule10000(epoch):
-    if epoch < 600:
-        return 1e-2
-    elif epoch < 1600:
-        return 1e-3
-    elif epoch < 3600:
-        return 1e-4
-    elif epoch < 4400:  # Shaking phase 1
-        return 5e-3
-    elif epoch < 5400:
-        return 1e-4
-    elif epoch < 6200:  # Shaking phase 2
-        return 5e-3
-    elif epoch < 7200:
-        return 1e-4
-    elif epoch < 8000:  # Shaking phase 3
-        return 5e-3
-    elif epoch < 9200:
-        return 1e-4
-    else:
-        return 1e-6
 
 
 def cart2pol_position(x, y):
@@ -269,189 +33,345 @@ def pol2cart_thrust_angle(theta, u_phi):
     thrust_angle_cart = theta + (0.5*np.pi - u_phi)
     return thrust_angle_cart
 
-@tf.keras.utils.register_keras_serializable()
-def custom_sin(x):
-    return tf.math.sin(x)
-
 def generate_T_perturbed_batch(t0, tf, M):
     delta_t = (tf - t0) / M
     base_times = np.linspace(t0, tf, M + 1)
     perturbed_times = np.random.normal(loc=base_times, scale=0.2 * delta_t)
     return perturbed_times
 
+def get_num_files(folder_path):
+    # Get the number of files in the specified folder
+    num_files = len([f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))])
+    return num_files
+def read_file(file_path):
+    # Read the .dat file into an array, skipping the header (the first line starting with #)
+    data = np.loadtxt(file_path, delimiter=' ', skiprows=1)
+    return data
 
-# Define a custom callback to regenerate the time grid at the start of each epoch
-class TimeGridCallback(tf.keras.callbacks.Callback):
-    def __init__(self, t0, tf, M):
-        super(TimeGridCallback, self).__init__()
-        self.t0 = t0
-        self.tf = tf
-        self.M = M
+def control_nodes_ref_times_3D_initial_state(states, config): #states needs to be in NDcartesian
+    t = np.linspace(0, config['tfinal'] / config['t_scale'], config['M'])
+    t_reshaped = t.reshape(-1, 1)
+    states_without_mass_ND = np.concatenate((t_reshaped, states[:, :-1]), axis=1)
+    control_entries = 2
+    coordinates = 'radial'
+    # Transform to normal cartesian, instead of ND cartesian
+    transformation = getattr(coordinate_transformations, f"{coordinates}_to_cartesian")
+    cartesian_states = transformation(states_without_mass_ND, config)
 
-    def on_epoch_begin(self, epoch, logs=None):
-        # Regenerate perturbed time grid
-        training_batch = generate_T_perturbed_batch(self.t0, self.tf, self.M)
-        time_dataset = tf.data.Dataset.from_tensor_slices(training_batch)
+    # Prepare control and initial state
+    control = cartesian_states[:, -control_entries:]
+    control_nodes = {key: value for key, value in zip(cartesian_states[:, 0], control)}
+    initial_state = cartesian_states[0, 1:-control_entries].reshape(-1, 1)
 
-        # Update the dataset used in training
-        self.model.training_dataset = time_dataset.batch(self.M)
+    # Make 3D initial state
+    if initial_state.shape[0] == 4:
+        initial_state = np.concatenate((initial_state[0:2, :],
+                                        np.array([[0]]),
+                                        initial_state[2:4, :],
+                                        np.array([[0]])),
+                                       axis=0).reshape(-1, 1)
 
+    ref_times = cartesian_states[:, 0]
 
-def plot_trajectory_polar_to_cart(attempt, predictions_rescaled, t_final, name_file):
-    x, y = pol2cart_position(predictions_rescaled[:,0], predictions_rescaled[:,1])
-    thrust_angle = pol2cart_thrust_angle(predictions_rescaled[:, 1], predictions_rescaled[:, 4])
-    thrust_magnitude = predictions_rescaled[:, 5]  # u_T_pred
+    return control_nodes, ref_times, initial_state
 
-    # Calculate thrust vectors in Cartesian coordinates
-    thrust_x = thrust_magnitude * np.cos(thrust_angle)
-    thrust_y = thrust_magnitude * np.sin(thrust_angle)
+def calculate_metrics_best_iteration(pcnn_states, tudat_states, pcnn_mass, tudat_mass, config=None, calculate_fuel='tudat'):
+    dr = np.linalg.norm(pcnn_states[:,1:3] - tudat_states[:,1:3], axis=1).reshape(-1, 1)
+    dv = np.linalg.norm(pcnn_states[:,3:5] - tudat_states[:,3:5], axis=1).reshape(-1, 1)
+    dm = abs((pcnn_mass[:,1] - tudat_mass[:,1])).reshape(-1, 1) # not tudat_mass[:,0] because 0 index is time column
 
-    # Scale down the thrust vectors for visibility in the plot
-    thrust_scale = 1.0 * max(np.max(x), np.max(y))  # Adjust scale factor as needed
-    thrust_x *= thrust_scale
-    thrust_y *= thrust_scale
-    max_thrust_magnitude_scaled = max(thrust_magnitude)*thrust_scale
+    # whether it's tudat of pcnn should not matter right..?
+    if calculate_fuel == 'tudat':
+        fuel_used = calculate_fuel_used(None, tudat_states, config=config)
+    if calculate_fuel == 'pcnn':
+        fuel_used = calculate_fuel_used(pcnn_states, None, config=config)
 
-    fig, ax = plt.subplots(figsize=(10, 6))  # Create a figure and axis
-    colors = cm.viridis(np.linspace(0, 1, len(x)))
-    for i in range(1, len(x)):
-        plt.plot(x[i - 1:i + 1], y[i - 1:i + 1], color=colors[i], marker='o', markersize=2, alpha=0.5)
+    time = pcnn_states[:,0]
 
-    # Plot thrust vectors as arrows
-    plt.quiver(x, y, thrust_x, thrust_y, color='red', scale_units='xy', angles='xy', scale=1, width=0.002)
+    return dr, dv, dm, fuel_used, time
 
-    plt.title('Trajectory in Cartesian Coordinates')
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.grid(True)
-    plt.axis('equal')  # Ensures the aspect ratio is equal, so the plot is not distorted
-    cbar = plt.colorbar(cm.ScalarMappable(cmap='viridis'), ax=ax, label='Time progression [s]')
-    cbar.set_ticks([0, 0.25, 0.5, 0.75, 1])  # Set appropriate ticks for the color bar
-    cbar.set_ticklabels([0, t_final / 2, t_final / 3, t_final / 4, t_final])  # Corresponding tick labels
+def calculate_metrics_all_iterations(losshistory, config=None, save=False, fname=None):
+    y = np.array(list(losshistory.y_pred_test))
 
-    # Add thrust scale to the legend
-    ax.quiver([-np.max(x)*1.2], [np.max(y)*1.2], [max_thrust_magnitude_scaled], [0], color='red', scale_units='xy', angles='xy', scale=1, width=0.002)
-    plt.text(-np.max(x)*1.2, np.max(y)*1.21, f'Thrust scale: {max(thrust_magnitude):.2f} N', fontsize=10, color='black', ha='center')
+    t = np.linspace(0, config['tfinal'] / config['t_scale'], config['M'])
+    t_reshaped = t.reshape(-1, 1)
 
-    plt.savefig(f"{name_file}_attempt{attempt}_trajectory.png", dpi=dpi_setting)
+    final_dr_list = []
+    final_dv_list = []
+    final_dm_list = []
+    fuel_used_list= []
 
-    # plt.show()
-    plt.close()
+    for i in range(len(losshistory.y_pred_test)):
+        y_pred_test_i = losshistory.y_pred_test[i]
+        control_nodes, ref_times, initial_state = control_nodes_ref_times_3D_initial_state(y_pred_test_i, config)
+        verification_object = verification.Verification(config['m0'], config['t0'], config['tfinal'], initial_state, config['isp'], central_body="Sun", control_nodes=control_nodes,
+                                                        verbose=True, ref_times=ref_times, mass_rate=True, config=config)
+        verification_object.integrate()
 
+        tudat_states_cartesian      = verification_object.states_tudat # TIME IN FIRST COLUMN
+        tudat_mass                  = verification_object.mass
 
-import matplotlib.pyplot as plt
+        # Nondimensionalize - tudat states
+        tudat_states_NDcartesian    = coordinate_transformations.cartesian_to_NDcartesian(tudat_states_cartesian, config)
+        # convert to cartesian (ND) - y_pred_test_i
+        y_pred_test_i_with_time     = np.concatenate((t_reshaped, y_pred_test_i), axis = 1)
+        y_pred_test_i_NDcartesian   = coordinate_transformations.radial_to_NDcartesian(y_pred_test_i_with_time, config)
 
+        dr = np.linalg.norm(y_pred_test_i_NDcartesian[:,1:3] - tudat_states_NDcartesian[:,1:3], axis=1).reshape(-1, 1)
+        dv = np.linalg.norm(y_pred_test_i_NDcartesian[:,3:5] - tudat_states_NDcartesian[:,3:5], axis=1).reshape(-1, 1)
+        dm = abs((y_pred_test_i[:, -1] - tudat_mass[:, 1])).reshape(-1, 1)  # not tudat_mass[:,0] because 0 index is time column
+        fuel_used = calculate_fuel_used(None, tudat_states_NDcartesian=tudat_states_NDcartesian, config=config)
 
-def plot_states_and_derivatives(attempt, predictions_rescaled, r_pred_dot, theta_pred_dot, v_r_pred_dot, v_theta_pred_dot, u_phi_pred_dot, u_T_pred_dot, m_pred_dot,
-                                time_grid_tensor, name_file):
-    # Create a figure and 7x2 subplots (7 rows, 2 columns)
-    fig, axes = plt.subplots(7, 2, figsize=(12, 12), sharex=True)
+        final_dr = dr[-1][0];   final_dr_list.append(final_dr)
+        final_dv = dv[-1][0];   final_dv_list.append(final_dv)
+        final_dm = dm[-1][0];   final_dm_list.append(final_dm)
+        fuel_used_list.append(fuel_used)
 
-    # Labels for the states and their derivatives
-    labels = ['r_pred', 'theta_pred', 'v_r_pred', 'v_theta_pred', 'u_phi_pred', 'u_T_pred', 'm_pred']
-    labels_dot = ['r_pred_dot', 'theta_pred_dot', 'v_r_pred_dot', 'v_theta_pred_dot', 'u_phi_pred_dot', 'u_T_pred_dot', 'm_pred_dot']
-
-    # Plot each state and its derivative in corresponding subplots
-    for i in range(7):
-        # Left column: states
-        axes[i, 0].plot(time_grid_tensor, predictions_rescaled[:, i], label=labels[i])
-        axes[i, 0].set_ylabel(labels[i])
-        axes[i, 0].grid(True)
-        axes[i, 0].legend(loc='upper right')
-
-        # Right column: state derivatives
-        axes[i, 1].plot(time_grid_tensor, [r_pred_dot, theta_pred_dot, v_r_pred_dot, v_theta_pred_dot, u_phi_pred_dot, u_T_pred_dot, m_pred_dot][i].numpy(), label=labels_dot[i])
-        axes[i, 1].set_ylabel(labels_dot[i])
-        axes[i, 1].grid(True)
-        axes[i, 1].legend(loc='upper right')
-
-    # Set a common x-label for the last row
-    axes[-1, 0].set_xlabel("Time")
-    axes[-1, 1].set_xlabel("Time")
-
-    # Set a common title for the entire figure
-    fig.suptitle("Predicted States and Their Derivatives in Time", fontsize=16)
-
-    # Adjust layout and save the figure
-    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the title
-    plt.savefig(f"{name_file}_attempt{attempt}_states_and_derivatives.png", dpi=dpi_setting)
-    # plt.show()
-    plt.close()
+    if save:
+        metrics_list = final_dr_list, final_dv_list, final_dm_list, fuel_used_list
+        save_metrics_history(losshistory, metrics_list, fname, verbose=True)
 
 
-def plot_states_pred_dot(attempt, r_pred_dot, theta_pred_dot, v_r_pred_dot, v_theta_pred_dot, u_phi_pred_dot, u_T_pred_dot, m_pred_dot, time_grid_tensor, name_file):
-    plt.figure()
+    return final_dr_list, final_dv_list, final_dm_list, fuel_used_list
 
-    plt.plot(time_grid_tensor, r_pred_dot.numpy(), label='r_pred_dot')
-    plt.plot(time_grid_tensor, theta_pred_dot.numpy(), label='theta_pred_dot')
-    plt.plot(time_grid_tensor, v_r_pred_dot.numpy(), label='v_r_pred_dot')
-    plt.plot(time_grid_tensor, v_theta_pred_dot.numpy(), label='v_theta_pred_dot')
-    plt.plot(time_grid_tensor, u_phi_pred_dot.numpy(), label='u_phi_pred_dot')
-    plt.plot(time_grid_tensor, u_T_pred_dot.numpy(), label='u_T_pred_dot')
-    plt.plot(time_grid_tensor, m_pred_dot.numpy(), label='m_pred_dot')
+def calculate_fuel_used(pcnn_states_NDcartesian=None, tudat_states_NDcartesian=None, config=None):
+    if tudat_states_NDcartesian is not None:
+        t = tf.reshape(tudat_states_NDcartesian[:, 0], (1, -1))[0] * config['t_scale']
+        U = tudat_states_NDcartesian[:, 5:7];    U_norm = tf.norm(U, axis=1)
+    if pcnn_states_NDcartesian is not None:
+        t = tf.reshape(pcnn_states_NDcartesian[:, 0], (1, -1))[0] * config['t_scale']
+        U = pcnn_states_NDcartesian[:, 5:7];    U_norm = tf.norm(U, axis=1)
 
-    plt.title("Predicted states derivatives in time")
-    plt.xlabel("Time")
-    plt.ylabel("State Derivatives")
-    plt.legend(loc='upper right')  # Add legend to the plot
-    plt.grid(True)
-    plt.savefig(f"{name_file}_attempt{attempt}_states_dot.png", dpi=dpi_setting)
-    # plt.show()
-    plt.close()
+    # Sort time and control
+    idx = tf.argsort(t)
+    t_sorted = tf.gather(t, idx)
+    U_norm_sorted = tf.gather(U_norm, idx)
 
-def plot_loss(attempt, epochs, physics_loss_list, l_r_list, l_theta_list, l_vr_list, l_vtheta_list, l_m_list, l_o_list, name_file):
-    # Plotting the individual loss terms
-    plt.figure(figsize=(10, 8))
-    plt.plot(epochs, physics_loss_list, label='Total Loss $\\mathcal{L}$', color='k', linewidth=0.5)
-    plt.plot(epochs, l_r_list, label='$L_r$', color='blue', linestyle='-', linewidth=0.5)
-    plt.plot(epochs, l_theta_list, label='$L_\\theta$', color='orange', linestyle='-', linewidth=0.5)
-    plt.plot(epochs, l_vr_list, label='$L_{v_r}$', color='green', linestyle='-', linewidth=0.5)
-    plt.plot(epochs, l_vtheta_list, label='$L_{v_\\theta}$', color='red', linestyle='-', linewidth=0.5)
-    plt.plot(epochs, l_m_list, label='$\\omega_m L_m$', color='purple', linestyle='-', linewidth=0.5)
-    plt.plot(epochs, l_o_list, label='$\\omega_o L_o$', color='brown', linestyle='-', linewidth=0.5)
+    # Propellent mass
+    propellent_mass = (1 / config['isp'] / 9.81) * tfp.math.trapz(U_norm_sorted, t_sorted)
+    propellent_mass_np = propellent_mass.numpy()
+    return propellent_mass_np
+
+def create_model(config, pde, constraint_layer, seed, train_distribution="uniform", std=None):
+    geom = dde.geometry.TimeDomain(config['t0'] / config['t_scale'], config['tfinal'] / config['t_scale'], sampler_std=std)
+    data = dde.data.PDE(geom, pde, [], config['N_train'], 2, num_test=config['N_train'], train_distribution=train_distribution)
+
+    # Overide the get test data function that includes boundary points
+    test_data = np.linspace(config['t0'] / config['t_scale'], config['tfinal'] / config['t_scale'], config['N_test'], dtype=dde.config.real(np)).reshape(-1, 1)
+    def new_test(self):
+        return test_data, None, None
+    data.test = new_test.__get__(data, dde.data.PDE)
+
+    initializer = tf.keras.initializers.GlorotNormal(seed=seed) # FFNN 20241022022825       PFNN 20241015143854
+    net = dde.nn.PFNN(config["layer_architecture_PFNN"], "sin", initializer)
+    net.apply_output_transform(constraint_layer)
+    model = ModelPCNN(data, net)
+    return model
+
+def restarter(config, pde, constraint_layer, lr_schedule, train_distribution="uniform", std=None, plot=True, save=False, N_attempts=40,
+              save_folder="restarter_runs", run_id_number=0, max_succesful_attempts=np.inf):
+    attempt = 1
+    succesful_attempts = 0
+    print('RESTARTER SCHEDULE\n'
+          '------------------')
+    while attempt <= N_attempts:
+        print("Initialisation attempt:", attempt);  seed = int(datetime.now().strftime("%Y%m%d%H%M%S"));    print("time-dependent random seed:", seed)
+
+        model = create_model(config, pde, constraint_layer, seed, train_distribution=train_distribution, std=std)
+
+        lr_schedule = lr_schedule
+        for (lr, iterations) in lr_schedule:
+            print("Learning rate=", lr, "Iterations=", iterations)
+
+            optimisation_alg = tf.keras.optimizers.Adam(learning_rate=lr)
+            model.compile(optimisation_alg, lr=lr, loss_weights=config['loss_weights'])
+            losshistory, train_state = model.train(iterations=iterations, display_every=500)  # , callbacks=[checkpoint_cb])
+
+            # RESTART
+            if np.isnan(np.sum(losshistory.loss_test[-1])) or np.sum(losshistory.loss_test[-1]) > 5.0:
+                print("Loss not below threshold, restarting now...")
+                break
+
+        if not np.isnan(np.sum(losshistory.loss_test[-1])):
+            # # Set save=False and use lines below to save loss;  also comment out the restart if condition
+            # output_dir = f'{save_folder}/{run_id_number}';  os.makedirs(output_dir, exist_ok=True)
+            # fname_loss = f'{output_dir}/run_{attempt}_loss.dat'
+            # save_loss_history(losshistory, fname_loss, verbose=True)
+
+            if np.sum(losshistory.loss_test[-1]) < 5.0:
+                succesful_attempts += 1
+                if save:
+                    output_dir = f'{save_folder}/{run_id_number}';  os.makedirs(output_dir, exist_ok=True)
+
+                    fname_loss    = f'{output_dir}/successful_run_{succesful_attempts}_loss.dat'
+                    fname_metrics = f'{output_dir}/successful_run_{succesful_attempts}_metrics.dat'
+
+                    save_loss_history(losshistory, fname_loss, verbose=True)
+                    calculate_metrics_all_iterations(losshistory, config, save=True, fname=fname_metrics)
+
+                if plot:
+                    pass
+
+                if succesful_attempts >= max_succesful_attempts:
+                    attempt = N_attempts+1
+
+            attempt += 1
 
 
-    plt.yscale('log')
-    plt.ylim(1e-16, 1e11)
+        print("amount of succesful attempts so far:", succesful_attempts)
+    print("amount of succesful attempts in total:", succesful_attempts)
 
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss $\\mathcal{L}_i$')
-    plt.title('Individual Loss Terms over Epochs')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f"{name_file}_attempt{attempt}_loss.png", dpi=600)
-    #plt.show()
-    plt.close()
+def single_run(config, pde, constraint_layer, lr_schedule, train_distribution="uniform", std=None, plot=True, save=False, seed=None):
+    if seed == None:
+        seed = int(datetime.now().strftime("%Y%m%d%H%M%S"));    print("time-dependent random seed:", seed)
+    else:
+        print("manually entered seed:", seed)
 
-def plot_states(t, train_state):
-    fig, axes = plt.subplots(7, 1, figsize=(12, 12), sharex=True)
+    model = create_model(config, pde, constraint_layer, seed=seed, train_distribution=train_distribution, std=std) # 20241015143854
 
-    # Labels for the states and their derivatives
-    labels = ['r_pred', 'theta_pred', 'v_r_pred', 'v_theta_pred', 'u_r_pred', 'u_tangential_pred', 'm_pred']
-    # labels_dot = ['r_pred_dot', 'theta_pred_dot', 'v_r_pred_dot', 'v_theta_pred_dot', 'u_phi_pred_dot', 'u_T_pred_dot', 'm_pred_dot']
-    for i in range(7):
-        # Left column: states
-        # axes[i, 0].plot(t, sol_pred[:, i], label=labels[i])
-        axes[i].plot(t, train_state.best_y[:,i], label=labels[i])
-        axes[i].set_ylabel(labels[i])
-        axes[i].grid(True)
-        axes[i].legend(loc='upper right')
+    for (lr, iterations) in lr_schedule:
+        print("Learning rate=", lr, "Iterations=", iterations)
 
-        # # Right column: state derivatives
-        # axes[i, 1].plot(t, [r_pred_dot, theta_pred_dot, v_r_pred_dot, v_theta_pred_dot, u_phi_pred_dot, u_T_pred_dot, m_pred_dot][i].numpy(), label=labels_dot[i])
-        # axes[i, 1].set_ylabel(labels_dot[i])
-        # axes[i, 1].grid(True)
-        # axes[i, 1].legend(loc='upper right')
+        optimisation_alg = tf.keras.optimizers.Adam(learning_rate=lr)
+        model.compile(optimisation_alg, lr=lr, loss_weights=config['loss_weights'])
+        losshistory, train_state = model.train(iterations=iterations, display_every=1000)  # , callbacks=[checkpoint_cb])
 
-    # Set a common x-label for the last row
-    axes[0].set_xlabel("Time")
-    # axes[-1, 1].set_xlabel("Time")
+        if np.isnan(np.sum(losshistory.loss_test[-1])) or np.sum(losshistory.loss_test[-1]) > 5.0:
+            print("Loss not below threshold, continuing anyway...")
 
-    # Set a common title for the entire figure
-    fig.suptitle("Predicted States ", fontsize=16)
+    if save:
+        save_loss_history(losshistory, f'loss.dat', verbose=True)
+        metrics_lists = calculate_metrics_all_iterations(losshistory, config)
+        save_metrics_history(losshistory, metrics_lists, f'metrics.dat', verbose=True)
+    if plot:
+        pass
 
-    # Adjust layout and save the figure
-    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the title
-    plt.savefig(f"states_plot.png", dpi=dpi_setting)
-    # plt.show()
-    # plt.close()
+    return losshistory, train_state
+
+def save_loss_history(loss_history, fname, verbose = True):
+    # Copied this function from external.py from the DeepXDE library
+    if verbose:
+        print("Saving loss history to {} ...".format(fname))
+    loss = np.hstack(
+        (
+            np.array(loss_history.steps)[:, None],
+            np.array(loss_history.loss_train),
+            np.array(loss_history.loss_test),
+            np.array(loss_history.metrics_test),
+        )
+    )
+    np.savetxt(fname, loss, header="iteration, loss_train, loss_test, metrics_test")
+
+def save_metrics_history(loss_history, metrics, fname, verbose = True):
+    # Copied this function from external.py from the DeepXDE library
+    if verbose:
+        print("Saving metrics history to {} ...".format(fname))
+    metrics = np.hstack(
+        (
+            np.array(loss_history.steps)[:, None],
+            np.array(metrics[0])[:, None],
+            np.array(metrics[1])[:, None],
+            np.array(metrics[2])[:, None],
+            np.array(metrics[3])[:, None],
+        )
+    )
+    np.savetxt(fname, metrics, header="step, FinalDr, FinalDv, FinalDm, Fuel used")
+
+def verify_basic_pcnn(run_id_number):
+    files_location = f'restarter_runs/{run_id_number}'
+    num_files = get_num_files(files_location)
+
+    def metrics_box_plot():
+        min_dr_values, min_dv_values, min_dm_values, min_fuel_values = [], [], [], []
+        for i in range(int(num_files/2)-1):
+            file_path = f"{files_location}/successful_run_{i + 1}_metrics.dat"
+            metrics_array = read_file(file_path)
+
+            iterations = metrics_array[:,0]
+            dr_list = metrics_array[:,1]   ;    min_dr_values.append(min(dr_list))
+            dv_list = metrics_array[:,2]   ;    min_dv_values.append(min(dv_list))
+            dm_list = metrics_array[:,3]   ;    min_dm_values.append(min(dm_list))
+            fuel_list = metrics_array[:,4] ;    min_fuel_values.append(min(fuel_list))
+
+        # Define boxplot color properties for blue boxplots
+        # boxplot_props = {
+        #     "boxprops": dict(color="blue"),
+        #     "medianprops": dict(color="orange"),
+        #     "whiskerprops": dict(color="blue"),
+        #     "capprops": dict(color="blue"),
+        #     "flierprops": dict(markeredgecolor="blue")
+        # }
+        # Creating subplots for each metric
+        fig, axs = plt.subplots(4, 1, figsize=(1.7, 12), sharex=True, gridspec_kw={'hspace': 0.1})
+
+        # Plotting each boxplot in a separate subplot with filled boxes
+        axs[0].boxplot(min_dr_values, patch_artist=True)#, **boxplot_props)
+        axs[0].set_ylabel('dx [AU]');       axs[0].set_yscale('log');   axs[0].set_ylim(0.003, 100)
+        axs[1].boxplot(min_dv_values, patch_artist=True)#, **boxplot_props)
+        axs[1].set_ylabel('dv [$V_⊕$]');    axs[1].set_yscale('log');   axs[1].set_ylim(0.003, 90)
+        axs[2].boxplot(min_dm_values, patch_artist=True)#, **boxplot_props)
+        axs[2].set_ylabel('dm [Kg]');       axs[2].set_yscale('log');   axs[2].set_ylim(0.0002, 130)
+        axs[3].boxplot(min_fuel_values, patch_artist=True)#, **boxplot_props))
+        axs[3].set_ylabel('Fuel [Kg]')  ;                               axs[3].set_ylim(0, 100)
+
+
+        # Adding x-axis label at the bottom
+        plt.xlabel('[1, 20, 20, 20, 20, 20, 7]', rotation=270)
+
+        # Adjust layout to prevent overlapping
+        # plt.tight_layout()
+        plt.subplots_adjust(left=0.4, right=0.95, top=0.95, bottom=0.2)
+
+        # plt.savefig(f'{files_location}/metrics_box_plot', dpi=dpi_setting)
+        plt.show()
+
+        print(np.median(min_dr_values), np.median(min_dv_values), np.median(min_dm_values), np.median(min_fuel_values))
+    metrics_box_plot()
+
+    def plot_total_loss(): # CAN ONLY BE USED WHEN METRICS ARE NOT SAVED AND PLOTTED -> CHANGE THIS IN RESTARTER FUNCTION
+        total_loss_each_run = []
+        for i in range(int(num_files)):
+            file_path = f"{files_location}/run_{i + 1}_loss.dat"
+            loss_array = read_file(file_path)
+
+            iterations_array = loss_array[:, 0]
+            all_loss_terms = loss_array[:, 7:]
+            total_loss = np.linalg.norm(all_loss_terms, axis=1)
+            total_loss_each_run.append(total_loss)
+
+        plt.figure(figsize=(12, 9))
+        for k in range(int(num_files)):
+            if total_loss_each_run[k][3] < 5.0:
+                color = 'green'
+            elif total_loss_each_run[k][-1] < 5.0:
+                color = 'orange'
+            else:
+                color = 'red'
+
+            plt.plot(iterations_array, total_loss_each_run[k], c=color)
+
+        plt.yscale('log')
+        plt.xlabel("Iterations", fontsize=16)
+        plt.ylabel(r'Total train loss $\mathcal{L}$ [-]', fontsize=16)
+        plt.title("Loss evolution LR schedule 2 (No restart)", fontsize=16)
+        plt.savefig(f'{files_location}/total_losses_plot', dpi=dpi_setting)
+        plt.show()
+    # plot_total_loss()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
