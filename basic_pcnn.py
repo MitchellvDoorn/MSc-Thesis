@@ -2,12 +2,22 @@
 import deepxde as dde
 import numpy as np
 # Import tf if using backend tensorflow.compat.v1 or tensorflow
-from deepxde.backend import tf
+import tensorflow as tf
 import master_thesis_mitchell_functions as mtmf
 import matplotlib.pyplot as plt
+import verification
+import coordinate_transformations
+import plots
+import time
+from datetime import datetime
+
+start_time = time.time()
+
+run_id_number = int(datetime.now().strftime("%Y%m%d%H%M%S"))
+print('Run ID number:', run_id_number)
 
 # Constants
-mu = 1.32712440042e20 # gravitational parameter of Sun
+MU = 1.32712440042e20 # gravitational parameter of Sun
 m0 = 100 # spacecraft initial mass
 AU = 149597870700 # [m]
 a = 10 # steepness parmater
@@ -18,14 +28,14 @@ isp = 2500 # specific impulse
 r0 = AU
 theta0 = 0
 vr0 = 0
-vtheta0 = np.sqrt(mu/r0)
+vtheta0 = np.sqrt(MU/r0)
 initial_state = np.array([r0, theta0, vr0, vtheta0])
 
 # Final state
 rfinal = 1.5*r0
 theta_final = 4*np.pi
 vr_final = 0
-vtheta_final = np.sqrt(mu/rfinal)
+vtheta_final = np.sqrt(MU/rfinal)
 final_state = np.array([rfinal, theta_final, vr_final, vtheta_final])
 
 # Non-dimensionalization parameters
@@ -43,6 +53,27 @@ days = 1000
 t0 = 0
 tfinal = days*24*3600 # Constant time of flight
 M = 200 # Amount of collocation points
+
+# Loss weights
+dyn_weight = 1
+m_weigth = 1e-5 # mass term
+o_weigth = 1e-7 # objective term
+
+# create config dictionary
+config = {"t0": t0,
+          "tfinal": tfinal,
+          "length_scale": length_scale,
+          "t_scale": t_scale,
+          "isp": isp,
+          "m0": m0,
+          "M": M,
+          "metrics": ["FinalDr", "FinalDv", "FinalDm", "Fuel used" ],
+          "N_train": M,
+          "N_test": M,
+          "layer_architecture_FNN": [1, 20, 20, 20, 20, 20, 7],
+          "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 7],
+          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth]
+}
 def pde(t, y):
     x1 = y[:, 0:1]
     theta = y[:, 1:2]  # unused
@@ -70,7 +101,7 @@ def pde(t, y):
     # RHS EOMs
     RHS_x1 = x2
     RHS_theta = x3 / x1
-    RHS_x2 = x3 ** 2 / x1 - (mu * t_scale ** 2 / length_scale ** 3) * x1 ** (-2) + (t_scale ** 2 / length_scale) * ur / m
+    RHS_x2 = x3 ** 2 / x1 - (MU * t_scale ** 2 / length_scale ** 3) * x1 ** (-2) + (t_scale ** 2 / length_scale) * ur / m
     RHS_x3 = - (x2 * x3) / x1 + (t_scale ** 2 / length_scale) * ut / m
     RHS_m = -T * t_scale / (isp * 9.81)
 
@@ -81,10 +112,9 @@ def pde(t, y):
         dx2_dt - RHS_x2,
         dx3_dt - RHS_x3,
         dm_dt - RHS_m,
-        L_o
+        # L_o
         ]
-
-def my_constraint_layer(t, y):
+def constraint_layer(t, y):
 
     c1 = tf.math.exp(-a * (t - t0))
     c2 = 1 - tf.math.exp(-a * (t - t0)) - tf.math.exp(a * (t - tfinal/t_scale))
@@ -115,70 +145,62 @@ def my_constraint_layer(t, y):
 
     return output
 
-geom = dde.geometry.TimeDomain(t0/t_scale, tfinal/t_scale)
+lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
 
-data = dde.data.PDE(geom, pde, [], M, 2, num_test=M, train_distribution="uniform")
-
-
-initializer = tf.keras.initializers.GlorotNormal
-net = dde.nn.FNN([1, 20, 20, 20, 20, 7], "sin", initializer)
-# net.regularizer = OptimalFuel.call
-net.apply_output_transform(my_constraint_layer)
+# delta_t = (config['tfinal']/config['t_scale'] - config['t0']/config['t_scale']) / config['N_train'];    std = 0.2 * delta_t
+# mtmf.restarter (config, pde, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, plot=True, save=True, N_attempts=60, run_id_number=run_id_number)
+losshistory, train_state = mtmf.single_run(config, pde, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, save=True, seed=20241030002141) # fill in seed=None for time dependent seed
 
 
 
-# Define a custom learning rate schedule as a subclass of LearningRateSchedule
-class CustomLRSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, initial_learning_rate):
-        self.initial_learning_rate = initial_learning_rate
-
-    def __call__(self, step):
-        step = tf.cast(step, tf.float32)  # Ensure step is a tensor
-        lr = tf.cond(step < 3000, lambda: tf.constant(1e-2),
-                     lambda: tf.cond(step < 13000, lambda: tf.constant(1e-3),
-                                     lambda: tf.cond(step < 23000, lambda: tf.constant(1e-4),
-                                                     lambda: tf.cond(step < 27000, lambda: tf.constant(5e-3),
-                                                                     lambda: tf.cond(step < 32000, lambda: tf.constant(1e-4),
-                                                                                     lambda: tf.cond(step < 36000, lambda: tf.constant(5e-3),
-                                                                                                     lambda: tf.cond(step < 41000, lambda: tf.constant(1e-4),
-                                                                                                                     lambda: tf.cond(step < 45000, lambda: tf.constant(5e-3),
-                                                                                                                                     lambda: tf.cond(step < 50000, lambda: tf.constant(1e-4),
-                                                                                                                                                     lambda: tf.constant(1e-5))))))))))
-        return lr
-class LearningRateLogger(dde.callbacks.Callback):
-    def on_epoch_end(self):
-        lr = self.model.optimizer._decayed_lr(tf.float32).numpy()
-        print(f"Epoch {self.model.train_state.epoch}: Learning Rate = {lr}")
 
 
-lr_schedule = CustomLRSchedule(initial_learning_rate=1e-2)
-mweigth = 1e-5 # mass term
-oweigth = 1e-7 # objective term
+############### Verification ################### TODO: write more cleanly so that only train_state and losshistory are needed as input to functions
+# mtmf.verify_basic_pcnn(f'{run_id_number}')
 
-optimisation_alg = tf.keras.optimizers.Adam(learning_rate=lr_schedule) #, beta_1 = 0.9, beta_2 = 0.999)
 
-model = dde.Model(data, net)
-model.compile(optimisation_alg, lr=lr_schedule, loss_weights=[1, 1, 1, 1, mweigth, oweigth])
-# model.train(iterations=15000)
-# model.compile("L-BFGS")
-losshistory, train_state = model.train(iterations=56000)
-
-#
+# make time array
 t = np.linspace(0, tfinal/t_scale, M)
-# t = t.reshape(M, 1)
-# sol_pred = model.predict(t)
+t_reshaped = t.reshape(-1, 1)
+
+# save time+mass seperately
+pcnn_mass = np.concatenate((t_reshaped, train_state.best_y[:, -1].reshape(-1, 1)), axis=1)
+# save ND states (with time and without mass)
+states_without_mass_ND = np.concatenate((t_reshaped, train_state.best_y[:, :-1]), axis = 1)
+states_without_mass_NDcartesian = coordinate_transformations.radial_to_NDcartesian(states_without_mass_ND, config)
+states_without_mass_NDcartesian_dict = {"NDcartesian": states_without_mass_NDcartesian}
+
+control_nodes, ref_times, initial_state = mtmf.control_nodes_ref_times_3D_initial_state(train_state.best_y, config)
+
+verification_object = verification.Verification(m0, t0, tfinal, initial_state, isp, central_body = "Sun", control_nodes = control_nodes,
+                                                verbose = True, ref_times = ref_times, mass_rate = True, config = config)
+verification_object.integrate()
+tudat_states_cartesian = verification_object.states_tudat
+tudat_mass             = verification_object.mass
+tudat_states_NDcartesian = coordinate_transformations.cartesian_to_NDcartesian(tudat_states_cartesian, config)
+tudat_states_NDcartesian_dict = {"NDcartesian": tudat_states_NDcartesian}
+
+# plots
+plots.plot_trajectory_radialND_to_cartesianND(np.concatenate((t_reshaped, train_state.best_y), axis = 1), r_target = 1.5, r_start = 1, N_arrows=100,  config=config)
+plots.plot_states(t, train_state)
+plots.plot_loss(losshistory)
+
+custom_labels = ["$r$", "$\\theta$", "$v_{r}$", "$v_{\\theta}$"]
+plots.plot_compare_pcnn_tudat_states(states_without_mass_NDcartesian_dict, tudat_states_NDcartesian_dict, custom_labels=custom_labels, log=False)
+plots.plot_compare_pcnn_tudat_mass(pcnn_mass, tudat_mass, config=config)
+
+Dr, Dv, Dm, fuel_used, time_interval = mtmf.calculate_metrics_best_iteration(states_without_mass_NDcartesian, tudat_states_NDcartesian, pcnn_mass, tudat_mass, config=config)
+plots.plot_metrics_best_iteration_vs_time(Dr, Dv, Dm, fuel_used, time_interval)
+plots.plot_metrics_vs_iterations(losshistory, config)
+
+plt.show()
 
 
 
 
 
-dde.saveplot(losshistory, train_state, issave=True, isplot=True)
+end_time = time.time()
+print(f"Entire run took {np.round(end_time-start_time, 1)} s")
 
-# Rescale and plot trajectory
-train_state.best_y[:,0] *= length_scale
-train_state.best_y[:,1] *= 1
-train_state.best_y[:,2] *= (length_scale/t_scale)
-train_state.best_y[:,3] *= (length_scale/t_scale)
 
-mtmf.plot_trajectory_polar_to_cart(0, train_state.best_y, tfinal, "Trajectory plot")
-mtmf.plot_states(t, train_state)
+
