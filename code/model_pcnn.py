@@ -2,7 +2,7 @@ import numpy as np
 import deepxde as dde
 from deepxde import config, optimizers, display
 import tensorflow as tf
-import objectives_functions
+import objective_functions
 
 class LossHistory(dde.model.LossHistory):
     # overwrote and added y_pred_test to the append method
@@ -28,11 +28,11 @@ class ModelPCNN(dde.Model):
     Commented out is an overwritten _compile_tensorflow method that adds an objective as a regularization term to the loss function
     '''
 
-    def __init__(self, data, net):
+    def __init__(self, data, net, loss_weights):
         super().__init__(data, net)
         self.losshistory = LossHistory() # important to import after the super() line because otherwise other LossHistory object from the LossHistory class in model.py will be inherited
-
-    def _compile_tensorflow(self, lr, loss_fn, decay, loss_weights):
+        self.loss_weigts_new = loss_weights
+    def _compile_tensorflow(self, lr, loss_fn, decay):
         """tensorflow"""
 
         @tf.function(jit_compile=config.xla_jit)
@@ -50,12 +50,12 @@ class ModelPCNN(dde.Model):
                 losses = [losses]
             # Regularization loss
             if self.net.regularizer is None:
-                losses += [objectives_functions.OptimalFuel.call(self, inputs, outputs_, losses)]
+                losses += [objective_functions.OptimalFuel.call(self, inputs, outputs_, losses)]
                 # losses += [self.net.regularizer(inputs, outputs_, losses)]
             losses = tf.convert_to_tensor(losses)
             # Weighted losses
-            if loss_weights is not None:
-                losses *= loss_weights
+            if self.loss_weigts_new is not None:
+                losses *= self.loss_weigts_new
             return outputs_, losses
 
         @tf.function(jit_compile=config.xla_jit)
@@ -152,6 +152,14 @@ class ModelPCNN(dde.Model):
         ):
             self.stop_training = True
 
-        if self.display_progress:
-            if config.rank == 0:
-                display.training_display(self.train_state)
+        # if self.display_progress:
+        if config.rank == 0:
+            display.training_display(self.train_state)
+
+
+class TimeDomain_with_std(dde.geometry.TimeDomain):
+    def __init__(self, t0, t1, sampler_std = None):
+        super().__init__(t0, t1)
+        self.t0 = t0
+        self.t1 = t1
+        self.sampler_std = sampler_std

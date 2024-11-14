@@ -6,7 +6,7 @@ import tensorflow as tf
 import master_thesis_mitchell_functions as mtmf
 import matplotlib.pyplot as plt
 import verification
-import coordinate_transformations
+import coordinates_transformation_functions
 import plots
 import time
 from datetime import datetime
@@ -72,7 +72,8 @@ config = {"t0": t0,
           "N_test": M,
           "layer_architecture_FNN": [1, 20, 20, 20, 20, 20, 7],
           "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 7],
-          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth]
+          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth],
+          "mass": True
 }
 def pde(t, y):
     x1 = y[:, 0:1]
@@ -115,92 +116,56 @@ def pde(t, y):
         # L_o
         ]
 def constraint_layer(t, y):
-
+    # Compute coefficients for trajectory interpolation
     c1 = tf.math.exp(-a * (t - t0))
-    c2 = 1 - tf.math.exp(-a * (t - t0)) - tf.math.exp(a * (t - tfinal/t_scale))
-    c3 = tf.math.exp(a * (t - tfinal/t_scale))
+    c2 = 1 - tf.math.exp(-a * (t - t0)) - tf.math.exp(a * (t - tfinal / t_scale))
+    c3 = tf.math.exp(a * (t - tfinal / t_scale))
     c_mass = 1 - tf.math.exp(-a * (t - t0))
 
-    # Apply sigmoid to get in [0, 1], while keeping a non-zero derivative for training
-    u_norm = tf.math.sigmoid(y[:, 4:5])
-    u_angle = tf.math.tanh(y[:, 5:6])
+    # Apply sigmoid and tanh to control values of `u_norm` and `u_angle`
+    u_norm = tf.math.sigmoid(y[:, 4:5]) * umax
+    u_angle = tf.math.tanh(y[:, 5:6]) * 2 * np.pi
     Nm = tf.math.sigmoid(y[:, 6:7])
 
-    # Rescale the U_R and the U_theta to their real values
-    u_norm = u_norm * umax
-    u_angle = u_angle * 2 * np.pi
-
-    # Transform the control to cartesian coordinates
+    # Transform control inputs to Cartesian coordinates
     ur = u_norm * tf.math.sin(u_angle)
     ut = u_norm * tf.math.cos(u_angle)
 
-    output = tf.concat([c1 * initial_state[0] + c2 * y[:, 0:1] + c3 * final_state[0],
-                        c1 * initial_state[1] + c2 * y[:, 1:2] + c3 * final_state[1],
-                        c1 * initial_state[2] + c2 * y[:, 2:3] + c3 * final_state[2],
-                        c1 * initial_state[3] + c2 * y[:, 3:4] + c3 * final_state[3],
-                        ur,
-                        ut,
-                        m0 - c_mass * m0 * Nm], axis=1
-                       )
+    # Calculate mass values based on initial mass and cumulative usage
+    mass_values = m0 - c_mass * m0 * Nm
+
+    # Sort mass in descending order to ensure non-increasing values
+    sorted_mass_values = -tf.sort(-mass_values, axis=0)
+
+    # Combine all components into the output vector
+    output = tf.concat([
+        c1 * initial_state[0] + c2 * y[:, 0:1] + c3 * final_state[0],
+        c1 * initial_state[1] + c2 * y[:, 1:2] + c3 * final_state[1],
+        c1 * initial_state[2] + c2 * y[:, 2:3] + c3 * final_state[2],
+        c1 * initial_state[3] + c2 * y[:, 3:4] + c3 * final_state[3],
+        ur,
+        ut,
+        sorted_mass_values
+    ], axis=1)
 
     return output
 
-lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
+lr_schedule = [(1e-2, 3000), (1e-3, 5000)]#, (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
 
-# delta_t = (config['tfinal']/config['t_scale'] - config['t0']/config['t_scale']) / config['N_train'];    std = 0.2 * delta_t
+delta_t = (config['tfinal']/config['t_scale'] - config['t0']/config['t_scale']) / config['N_train'];    std = 0.2 * delta_t
 # mtmf.restarter (config, pde, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, plot=True, save=True, N_attempts=60, run_id_number=run_id_number)
-losshistory, train_state = mtmf.single_run(config, pde, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, save=True, seed=20241030002141) # fill in seed=None for time dependent seed
+losshistory, train_state = mtmf.single_run(config, pde, constraint_layer, lr_schedule, train_distribution="uniform", std=None, save=True, seed=20241114154348) # fill in seed=None for time dependent seed
 
-
-
-
-
-############### Verification ################### TODO: write more cleanly so that only train_state and losshistory are needed as input to functions
-# mtmf.verify_basic_pcnn(f'{run_id_number}')
-
-
-# make time array
-t = np.linspace(0, tfinal/t_scale, M)
-t_reshaped = t.reshape(-1, 1)
-
-# save time+mass seperately
-pcnn_mass = np.concatenate((t_reshaped, train_state.best_y[:, -1].reshape(-1, 1)), axis=1)
-# save ND states (with time and without mass)
-states_without_mass_ND = np.concatenate((t_reshaped, train_state.best_y[:, :-1]), axis = 1)
-states_without_mass_NDcartesian = coordinate_transformations.radial_to_NDcartesian(states_without_mass_ND, config)
-states_without_mass_NDcartesian_dict = {"NDcartesian": states_without_mass_NDcartesian}
-
-control_nodes, ref_times, initial_state = mtmf.control_nodes_ref_times_3D_initial_state(train_state.best_y, config)
-
-verification_object = verification.Verification(m0, t0, tfinal, initial_state, isp, central_body = "Sun", control_nodes = control_nodes,
-                                                verbose = True, ref_times = ref_times, mass_rate = True, config = config)
-verification_object.integrate()
-tudat_states_cartesian = verification_object.states_tudat
-tudat_mass             = verification_object.mass
-tudat_states_NDcartesian = coordinate_transformations.cartesian_to_NDcartesian(tudat_states_cartesian, config)
-tudat_states_NDcartesian_dict = {"NDcartesian": tudat_states_NDcartesian}
+# Verification
+# mtmf.verify_basic_pcnn(f'{run_id_number}_FNN')
+mtmf.verify_run(train_state.best_y, losshistory, config, showplot=True, saveplots=True)
 
 # plots
-plots.plot_trajectory_radialND_to_cartesianND(np.concatenate((t_reshaped, train_state.best_y), axis = 1), r_target = 1.5, r_start = 1, N_arrows=100,  config=config)
-plots.plot_states(t, train_state)
-plots.plot_loss(losshistory)
-
-custom_labels = ["$r$", "$\\theta$", "$v_{r}$", "$v_{\\theta}$"]
-plots.plot_compare_pcnn_tudat_states(states_without_mass_NDcartesian_dict, tudat_states_NDcartesian_dict, custom_labels=custom_labels, log=False)
-plots.plot_compare_pcnn_tudat_mass(pcnn_mass, tudat_mass, config=config)
-
-Dr, Dv, Dm, fuel_used, time_interval = mtmf.calculate_metrics_best_iteration(states_without_mass_NDcartesian, tudat_states_NDcartesian, pcnn_mass, tudat_mass, config=config)
-plots.plot_metrics_best_iteration_vs_time(Dr, Dv, Dm, fuel_used, time_interval)
-plots.plot_metrics_vs_iterations(losshistory, config)
-
+plots.plot_trajectory_radialND_to_cartesianND(train_state.best_y, r_target = 1.5, r_start = 1, N_arrows=100,  config=config)
+plots.plot_states(train_state.best_y, config)
+plots.plot_loss(losshistory, mass=config['mass'])
 plt.show()
-
-
-
-
 
 end_time = time.time()
 print(f"Entire run took {np.round(end_time-start_time, 1)} s")
-
-
-
+plt.close()

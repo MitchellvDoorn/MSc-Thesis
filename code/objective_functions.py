@@ -112,7 +112,7 @@ class OptimalFuel(Objective):
         #     U = y[:, self._entries:-1]
         # else:
         #     U = y[:, self._entries:]
-        U = y[:, 4:-1]
+        U = y[:, 4:6]
 
         U_norm = tf.norm(U, axis=1)
 
