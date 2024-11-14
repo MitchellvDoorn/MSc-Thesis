@@ -50,6 +50,6 @@ pip install notebook
 ```
 
 
-## 2. Run Basic PCNN model manual<a name="run_basic_pcnn"></a>
+## 2. Basic PCNN model manual<a name="run_basic_pcnn"></a>
 
 Check out and run the [basic PCNN manual](https://github.com/MitchellvDoorn/MSc-Thesis/blob/main/code/basic_pcnn_manual.ipynb) in the [code](https://github.com/MitchellvDoorn/MSc-Thesis/tree/main/code) folder to see how to code of the basic PCNN model works.
