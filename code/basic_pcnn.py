@@ -116,41 +116,37 @@ def pde(t, y):
         # L_o
         ]
 def constraint_layer(t, y):
-    # Compute coefficients for trajectory interpolation
+
     c1 = tf.math.exp(-a * (t - t0))
-    c2 = 1 - tf.math.exp(-a * (t - t0)) - tf.math.exp(a * (t - tfinal / t_scale))
-    c3 = tf.math.exp(a * (t - tfinal / t_scale))
+    c2 = 1 - tf.math.exp(-a * (t - t0)) - tf.math.exp(a * (t - tfinal/t_scale))
+    c3 = tf.math.exp(a * (t - tfinal/t_scale))
     c_mass = 1 - tf.math.exp(-a * (t - t0))
 
-    # Apply sigmoid and tanh to control values of `u_norm` and `u_angle`
-    u_norm = tf.math.sigmoid(y[:, 4:5]) * umax
-    u_angle = tf.math.tanh(y[:, 5:6]) * 2 * np.pi
+    # Apply sigmoid to get in [0, 1], while keeping a non-zero derivative for training
+    u_norm = tf.math.sigmoid(y[:, 4:5])
+    u_angle = tf.math.tanh(y[:, 5:6])
     Nm = tf.math.sigmoid(y[:, 6:7])
 
-    # Transform control inputs to Cartesian coordinates
+    # Rescale the U_R and the U_theta to their real values
+    u_norm = u_norm * umax
+    u_angle = u_angle * 2 * np.pi
+
+    # Transform the control to cartesian coordinates
     ur = u_norm * tf.math.sin(u_angle)
     ut = u_norm * tf.math.cos(u_angle)
 
-    # Calculate mass values based on initial mass and cumulative usage
-    mass_values = m0 - c_mass * m0 * Nm
-
-    # Sort mass in descending order to ensure non-increasing values
-    sorted_mass_values = -tf.sort(-mass_values, axis=0)
-
-    # Combine all components into the output vector
-    output = tf.concat([
-        c1 * initial_state[0] + c2 * y[:, 0:1] + c3 * final_state[0],
-        c1 * initial_state[1] + c2 * y[:, 1:2] + c3 * final_state[1],
-        c1 * initial_state[2] + c2 * y[:, 2:3] + c3 * final_state[2],
-        c1 * initial_state[3] + c2 * y[:, 3:4] + c3 * final_state[3],
-        ur,
-        ut,
-        sorted_mass_values
-    ], axis=1)
+    output = tf.concat([c1 * initial_state[0] + c2 * y[:, 0:1] + c3 * final_state[0],
+                        c1 * initial_state[1] + c2 * y[:, 1:2] + c3 * final_state[1],
+                        c1 * initial_state[2] + c2 * y[:, 2:3] + c3 * final_state[2],
+                        c1 * initial_state[3] + c2 * y[:, 3:4] + c3 * final_state[3],
+                        ur,
+                        ut,
+                        m0 - c_mass * m0 * Nm], axis=1
+                       )
 
     return output
 
-lr_schedule = [(1e-2, 3000), (1e-3, 5000)]#, (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
+lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
 
 delta_t = (config['tfinal']/config['t_scale'] - config['t0']/config['t_scale']) / config['N_train'];    std = 0.2 * delta_t
 # mtmf.restarter (config, pde, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, plot=True, save=True, N_attempts=60, run_id_number=run_id_number)
