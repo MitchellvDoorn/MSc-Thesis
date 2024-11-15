@@ -487,6 +487,57 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 *⇒ This is indeed an important thing to consider. Interesting things to try is also to extend the number of epochs to see if the accuracy can easily be increased by just having more epochs. Furthermore if accuracy is limiting maybe the problem could be broken down into multiple optimization problems, but it would be very interesting if the SOI entry point is an optimizable parameter. Imo it would make the whole thesis results a lot less interesting if it wasn’t the case so try to find a way of including that*
 - Q’s
 
+### Midterm: Week 21 (31-10)
+
+Notes I taken after the meeting:
+
+- Use beta value to optimize gravity assist? Kevin and Onur sounded positive about this. Beta value should be equal to zero, have a look at this beta value and figure out how exactly to use it
+- Try gigantic NNs and train them for a very long time to see what happens, on Delft Blue
+- Try to constrain the mass so that's it's not allowed to increase
+- Thijs said using ReLU could be really worth it, it’s one of the most used activation functions nowadays
+- Thijs said using different activation functions per layer could help
+- Thijs said using adaptive weight sampling could be interesting
+
+- Some validation/ comparison to a real life scenario is missing, you need this to have a feeling on how accurate your solutions are
+- Onur was expecting some coast phases in the optimal solution, whereas in my solutions that doesn't happen, try to find optimal solutions with another optimization method to see if that's indeed what we should expect in an optimal solution. Not sure if this needs to be the case though...
+- Lambert arc's, ...
+- Koen said less spread when using PFNN's make sense, because it's less flexible than FNN’s without separate NNs per output
+- 0.00001 AU instead of 0.0640 could be due to the fact that my TOF is way less in subproblem 1
+- Look at whether using the lowest values of the metrics can be done, since there might be trade offs in there, the lowest values don't always happen at the same epoch!
+
+### Meeting 15: Week 23 (15-11)
+
+- AI image
+- Plan overview
+- Recap mid-term
+    - Change previous GA Scenario (BepiColombo) to something else, for now EVEMJ
+    *⇒  Kevin agrees that indeed it might be more relevant to compare the PCNN results to other preliminary trajectory optimization methods. It might be interesting to see how the fuel used compares to some real life mission though, but for verification purposes real life data is not that suitable, because of the assumptions (2D restricted Two-body problem) made by my model. I’ve also found a [paper](https://arc.aiaa.org/doi/10.2514/1.13095) where an EVEMJ case is optimized and two-body motion between GAs is assumed . Furthermore the [Hodographic shaping method in combination with a Simple Genetic Algorithm (SGA) algorithm as the optimizer](https://docs.tudat.space/en/latest/_src_getting_started/_src_examples/tudatpy-examples/mission_design/hodographic_shaping_mga_optimization.html) can be used for comparison/validation.*
+    - Using ReLU (for $\theta$, and $r$) in combination with PFNN 
+    *⇒ showed that using this actually decreased performance and **TODO: I am still going to try to understand why***
+    - Using different activation functions per layer
+    *⇒ showed that using this did not necessarily increase performance, similar results for when using* `"relu", "relu", "relu", "sin", "sin", "sin"` with FNN
+    - Use tanh activation function (each layer)
+    *⇒ Same results obtained. Not more accurate. tanh is similar to sin so this was expected*
+    - Non increasing mass constraint
+    *⇒ Same results obtained. Not more accurate. PCNN is able to recognize mass should not increase, so this is good*
+    - Try without mass as NN output
+    *⇒ works, it has **a bit faster runtime**, is **not more accurate** and **requires more runs per 1 successful run.** For now it’s therefore decided to leave the mass output in there since no more accurate solutions are obtained and trading more amounts of runs needed for a bit more efficiency (cpu time) is considered not worth it.*
+    - Longer training time
+    *⇒ could increase accuracy a tiny bit. Tried 141000 instead of the regular 51000 iterations and accuracy was a tiny bit better. Also tried it for 1 000 000 iterations, because why not, then chances of an exploding gradient become larger and this became the limiting factor here. **TODO: I could still try to do this in combination with clipping the gradient values though to prevent them from exploding.***
+- Code manual GitHub repo
+*⇒ Showed this*
+- Results subproblem 1
+*⇒ Very briefly showed this*
+- $\beta$ value to optimize
+*⇒ This value describes the orientation of the GA hyperbola. If it aligns with the velocity vector of the GA planet, the change in energy is maximized. So with this we have a way of telling the PCNN how to optimize the energy change. **TODO: have a look at how to use this**.
+⇒ Furthermore this can also be used to verify the hyperbola part of the trajectory. You have a relation between the energy change and the orientation of the hyperbola, you can check if this relation is satisfied by the PCNN.*
+    
+    $\Delta \mathscr{E}=\frac{2 V_t^{\prime} V_{\infty_t} \cos \beta}{\sqrt{1+B^2 V_{\infty_t}^4 / \mu^2}} \quad ; \quad \Delta\left(\frac{1}{a}\right)=-\frac{4}{\mu_S} \frac{V_t^{\prime} V_{\infty_t} \cos \beta}{\sqrt{1+B^2 V_{\infty_t}^4 / \mu^2}}$
+    
+
+- Plan next week
+*⇒ continue with subproblem 2, don’t spend too much time on V&V of subproblem 1 since I’m currently not sure what results of subproblem 1 I will include in the thesis report. Why have we done subproblem 1 at all then? To individually check the effect of all of the above things I tried on the performance and/or accuracy of the basic PCNN. Those were all pretty straight forward things to try that did not take too much time, but nothing seemed to improve performance really significantly… If this were the case this could be incorporated in solving subproblem 2. In order to check the effect it was better to try it on the basic PCNN model first, before extending and modifying the basic PCNN model and then trying it.*
+
 ### Questions for Supervisor
 
 - Do you have any other literature on anything you still want to recommend?
@@ -512,6 +563,7 @@ Indirect method probably requires some extra studying. Came across a lot of term
 *⇒ Do not revise immediately, is not best use of time, literature study will be added to the thesis report at the end, so it should be cohesive with that though, e.g. if a major change has occurred (change in research question), it may need to be adjusted. Literature study is a snapshot at a certain moment in time of the research, and it is normal that things do not go exactly as planned in the literature report*
 - Tips for when stuck with very specific questions?
 *Discussed various tips for when stuck (asking around, find people that work on somewhat similar problems, rubber duck effect, remember having this is absolutely normal)*
+- Would it be an idea to not limit the maximum allowable thrust
 
 ### Questions for Thesis boost day
 
@@ -523,4 +575,6 @@ Indirect method probably requires some extra studying. Came across a lot of term
 
 - Have you once initialized the weights and biases not randomly? I could use that for verification
 *⇒ He uses a seed for this*
+- Why is the perturbed sampling needed?
+- Why is mass as an output of the NN needed, if you already have the thrust magnitude as an output. It should be possible to omit this and calculate the mass per *t* based on the predicted applied thrust.
 -
