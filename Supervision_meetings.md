@@ -534,9 +534,39 @@ Notes I taken after the meeting:
     
     $\Delta \mathscr{E}=\frac{2 V_t^{\prime} V_{\infty_t} \cos \beta}{\sqrt{1+B^2 V_{\infty_t}^4 / \mu^2}} \quad ; \quad \Delta\left(\frac{1}{a}\right)=-\frac{4}{\mu_S} \frac{V_t^{\prime} V_{\infty_t} \cos \beta}{\sqrt{1+B^2 V_{\infty_t}^4 / \mu^2}}$
     
-
+- Additional midterm feedback Kevin
+*⇒ Something I could improve on is the way I communicate/present my results. I could have more structured arguments for this (and sometimes better visuals on the slides). Sometimes I presented something and I did not explain well enough how I came to that result or conclusion. Then the listener kind of has to just believe what I’m saying, whereas more structured arguments can help communicating this is a more convincing way. Coming up with these ‘structured arguments’ can also help you to not jump to conclusions too early.*
 - Plan next week
 *⇒ continue with subproblem 2, don’t spend too much time on V&V of subproblem 1 since I’m currently not sure what results of subproblem 1 I will include in the thesis report. Why have we done subproblem 1 at all then? To individually check the effect of all of the above things I tried on the performance and/or accuracy of the basic PCNN. Those were all pretty straight forward things to try that did not take too much time, but nothing seemed to improve performance really significantly… If this were the case this could be incorporated in solving subproblem 2. In order to check the effect it was better to try it on the basic PCNN model first, before extending and modifying the basic PCNN model and then trying it.*
+
+### Meeting 16: Week 26 (05-12)
+
+- AI image
+- Plan overview
+- *⇒ Bernd Dachwald has done some research on GAs and NNs in the 80s/90s, might be fun to look at ← **TODO***
+- SP2: Technique 1
+    - Constraint layer
+    - 8th output
+
+*⇒ see if changing the magnitudes of r_ga can help for convergence*
+
+- SP2: Technique 2
+    - 2 extra outputs $\delta$ and $\beta$
+    - Constraining $r$, $\theta$, $v_r$, $v_{\theta}$ right before and after GA
+
+*⇒ Could be interesting!*
+
+- EOMs check
+*⇒ You could verify this with Wakker chapter 4 and/or Tudat. When doing it with tudat you could e.g. numerically integrate with your EOMs and compare it, that could then server as the verification of purely the EOMs*
+
+$$
+\dot{r}=v_r \\\dot{\theta}=\frac{v_\theta}{r} \\ \dot{v}_r=\frac{v_\theta^2}{r}-\frac{\mu}{r^2}+a_r^{\text {perturb }}\\ \dot{v}_\theta=-\frac{v_r v_\theta}{r}+a_\theta^{\text {perturb }}
+$$
+
+$\begin{aligned}& \mathbf{a}_{\text {perturb }}=-\frac{G M_{\text {Mars }}}{\left\|\mathbf{r}_{\mathrm{sc}}-\mathbf{r}_{\text {Mars }}\right\|^3}\left(\mathbf{r}_{\mathrm{sc}}-\mathbf{r}_{\mathrm{Mars}}\right)\\ & a_r^{\text {perturb }}=\frac{\mathbf{a}_{\text {perturb }} \cdot \hat{\mathbf{r}}}{\|\hat{\mathbf{r}}\|} \\ & a_\theta^{\text {perturb }}=\frac{\mathbf{a}_{\text {perturb }} \cdot \hat{\theta}}{\|\hat{\theta}\|}\end{aligned}$
+
+- General discussions
+*⇒ Keep Kevin in the loop. Keep making sure all the work you do keeps being verified sufficiently to make sure the results can be trusted with high confidence.*
 
 ### Questions for Supervisor
 
@@ -576,5 +606,6 @@ Indirect method probably requires some extra studying. Came across a lot of term
 - Have you once initialized the weights and biases not randomly? I could use that for verification
 *⇒ He uses a seed for this*
 - Why is the perturbed sampling needed?
+*⇒ Ik heb inderdaad weinig redenen voor de exacte manier waarop ik de time batches sample. Die manier heb ik gelezen in dat artikel waar ik aan refereer en dat heb ik toen gewoon overgenomen. Mijn logica was dat als de thrust output een beetje een grillerige vorm zou hebben, dat de random tijd samples voor verschillende training epochs ervoor zouden zorgen dat alle momenten in de tijd "behandeld" worden voor die integraal, dus ook lokale detail. Maar ik heb verder geen structureel onderzoek gedaan naar het effect van de time sampling. Ik was ook al inderdaad tot de conclusie gekomen dat de hele methode niet zo gevoelig is voor de sampling methode, vandaar dat ik daar niet verder op gefocussed heb. Verder heb je inderdaad gelijk en is het natuurlijk in het algemeen ook handig om overfitten te voorkomen. Maar geen specifieke reden dus.*
 - Why is mass as an output of the NN needed, if you already have the thrust magnitude as an output. It should be possible to omit this and calculate the mass per *t* based on the predicted applied thrust.
--
+*⇒ you could try this, what happens if mass becomes negative though..? Also see email for more elaborate answer.*
