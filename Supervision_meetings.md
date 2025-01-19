@@ -266,7 +266,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 - Kick-off Form
 ***Decided to extend the kick off by 2 weeks! (so to May 20)***
 
-### Meeting 6: Kick off meeting (22-05)
+### Meeting 6: Week 1 (22-05) (Kick off meeting)
 
 ### Agenda
 
@@ -320,7 +320,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
         - **Don’t just read stuff, critically evaluate whether it is useful**
         - **You simply can’t pursue everything, evaluate as quickly as possible whether something directly will help you reaching your goal. Maybe start the other way around → Ask yourself: what do I need now to reach my goal**
 
-### Meeting 8: Week 6.5 (03-07)
+### Meeting 8: Week 7 (03-07)
 
 ### Agenda
 
@@ -350,7 +350,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
         - *What coordinate systems are there*
         - …
 
-### Meeting 9: Week 8 (29-07)
+### Meeting 9: Week 11 (29-07)
 
 ### Agenda
 
@@ -375,7 +375,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 - Artemis presentation at MSc kick off day
 *⇒ mail education AE*
 
-### Meeting 10: Week 9 (07-08)
+### Meeting 10: Week 12 (07-08)
 
 ### Agenda
 
@@ -390,7 +390,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 *⇒ Mail Bart root for presentation
 ⇒ Email Kevin about participating at the BBQ*
 
-### Meeting 11: Week 14 (12-09)
+### Meeting 11: Week 17 (12-09)
 
 - Literature review
     - Feedback
@@ -424,7 +424,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
         *In general, Kevin says progression is as expected and I am well on my way, keep in mind we’ll park research activity 3 for now though.*
         
 
-### Meeting 12: Week 16 (25-09)
+### Meeting 12: Week 19 (25-09)
 
 - AI image
 - Literature review items to discuss
@@ -449,7 +449,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 *⇒ Showed Kevin the problem, he doesn’t have an immediate answer to it (which was expected), could be a red flag though that I haven’t seen anybody use it on the internet, everybody uses a custom training loop (so just a ‘for loop’).
   → For now: I will first look into GPU training and using Delft Blue, maybe this increases training times already significantly enough to not have to solve this problem.*
 
-### Meeting 13: Week 18 (09-10)
+### Meeting 13: Week 21 (09-10)
 
 - AI image
 - Plan update
@@ -464,7 +464,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 *⇒ Showed the results of the working basic PCNN model for the first time*
 - Q’s
 
-### Meeting 14: Week 19 (18-10)
+### Meeting 14: Week 22 (18-10)
 
 - AI image
 - Plan overview
@@ -487,7 +487,7 @@ Provides more realistic trajectories, e.g. you can then have transfer between tw
 *⇒ This is indeed an important thing to consider. Interesting things to try is also to extend the number of epochs to see if the accuracy can easily be increased by just having more epochs. Furthermore if accuracy is limiting maybe the problem could be broken down into multiple optimization problems, but it would be very interesting if the SOI entry point is an optimizable parameter. Imo it would make the whole thesis results a lot less interesting if it wasn’t the case so try to find a way of including that*
 - Q’s
 
-### Midterm: Week 21 (31-10)
+### Midterm: Week 24 (31-10)
 
 Notes I taken after the meeting:
 
@@ -505,7 +505,7 @@ Notes I taken after the meeting:
 - 0.00001 AU instead of 0.0640 could be due to the fact that my TOF is way less in subproblem 1
 - Look at whether using the lowest values of the metrics can be done, since there might be trade offs in there, the lowest values don't always happen at the same epoch!
 
-### Meeting 15: Week 23 (15-11)
+### Meeting 15: Week 26 (15-11)
 
 - AI image
 - Plan overview
@@ -539,7 +539,7 @@ Notes I taken after the meeting:
 - Plan next week
 *⇒ continue with subproblem 2, don’t spend too much time on V&V of subproblem 1 since I’m currently not sure what results of subproblem 1 I will include in the thesis report. Why have we done subproblem 1 at all then? To individually check the effect of all of the above things I tried on the performance and/or accuracy of the basic PCNN. Those were all pretty straight forward things to try that did not take too much time, but nothing seemed to improve performance really significantly… If this were the case this could be incorporated in solving subproblem 2. In order to check the effect it was better to try it on the basic PCNN model first, before extending and modifying the basic PCNN model and then trying it.*
 
-### Meeting 16: Week 26 (05-12)
+### Meeting 16: Week 29 (05-12)
 
 - AI image
 - Plan overview
@@ -557,19 +557,80 @@ Notes I taken after the meeting:
 *⇒ Could be interesting!*
 
 - EOMs check
-*⇒ You could verify this with Wakker chapter 4 and/or Tudat. When doing it with tudat you could e.g. numerically integrate with your EOMs and compare it, that could then server as the verification of purely the EOMs*
-
-$$
-\dot{r}=v_r \\\dot{\theta}=\frac{v_\theta}{r} \\ \dot{v}_r=\frac{v_\theta^2}{r}-\frac{\mu}{r^2}+a_r^{\text {perturb }}\\ \dot{v}_\theta=-\frac{v_r v_\theta}{r}+a_\theta^{\text {perturb }}
-$$
-
-$\begin{aligned}& \mathbf{a}_{\text {perturb }}=-\frac{G M_{\text {Mars }}}{\left\|\mathbf{r}_{\mathrm{sc}}-\mathbf{r}_{\text {Mars }}\right\|^3}\left(\mathbf{r}_{\mathrm{sc}}-\mathbf{r}_{\mathrm{Mars}}\right)\\ & a_r^{\text {perturb }}=\frac{\mathbf{a}_{\text {perturb }} \cdot \hat{\mathbf{r}}}{\|\hat{\mathbf{r}}\|} \\ & a_\theta^{\text {perturb }}=\frac{\mathbf{a}_{\text {perturb }} \cdot \hat{\theta}}{\|\hat{\theta}\|}\end{aligned}$
-
+*⇒ You could verify this with Wakker chapter 4 and/or Tudat. When doing it with tudat you could e.g. numerically integrate with your EOMs and compare it, that could then serve as the verification of purely the EOMs*
+- $\dot{r}=v_r \\\dot{\theta}=\frac{v_\theta}{r} \\ \dot{v}_r=\frac{v_\theta^2}{r}-\frac{\mu}{r^2}+a_r^{\text {perturb }}\\ \dot{v}_\theta=-\frac{v_r v_\theta}{r}+a_\theta^{\text {perturb }}$
+- $\begin{aligned}& \mathbf{a}_{\text {perturb }}=-\frac{G M_{\text {Mars }}}{\left\|\mathbf{r}_{\mathrm{sc}}-\mathbf{r}_{\text {Mars }}\right\|^3}\left(\mathbf{r}_{\mathrm{sc}}-\mathbf{r}_{\mathrm{Mars}}\right)\\ & a_r^{\text {perturb }}=\frac{\mathbf{a}_{\text {perturb }} \cdot \hat{\mathbf{r}}}{\|\hat{\mathbf{r}}\|} \\ & a_\theta^{\text {perturb }}=\frac{\mathbf{a}_{\text {perturb }} \cdot \hat{\theta}}{\|\hat{\theta}\|}\end{aligned}$
 - General discussions
 *⇒ Keep Kevin in the loop. Keep making sure all the work you do keeps being verified sufficiently to make sure the results can be trusted with high confidence.*
 
+### Meeting 17: Week 30 (13-12)
+
+- AI image
+- Manual basic PCNN
+*⇒ Kevin hasn’t tried to run it yet, but he did have a look at it*
+- SP2: Technique 1 (8th output and adjusted constraint layer)
+    - Too many times I get nan values
+        - Tried: grad clipping, underflow, overflow → now checking every value to exactly pin point where it happens → could help understand what is happening…
+        *⇒ Maybe start asking people around about this now*
+    - For this, maybe start with no extra point in time domain and only after convergence has already happened a bit, add time points to prevent the early nan values
+    *⇒ What could work for this is to make a custom for loop that trains the model for a while, then stops and then continues training it with a newly sampled time domain. **← TODO***
+- SP2: Technique 2
+    - 2 ways of doing it:
+        - 2 extra **outputs** $\delta$ and $\beta$
+        - 2 extra **trainable parameters** $\delta$ and $\beta$
+        - Adding a dynamical loss term OR constraining $r$, $\theta$, $v_r$, $v_{\theta}$ right before and after GA
+
+*⇒ I was implementing this technique as we speak so we did not discuss it too elaborately*
+
+### Meeting 18: Week 34 (09-01)
+
+- AI image
+- Planning
+- Technique 1:
+⇒ *nan* values solution → transfer learning
+- Technique 2:
+    - Extension of outputs
+    - Trainable parameters $\delta_{ga}, r_p, v_{sc}^-$ → constrain initial state leg 2
+    - Added GA loss term
+    - Nondimensionalization leg 2 → same time domain input so scale time with `(TOF_MC_days/TOF_EM_days)`
+    - Lot’s of debugging and playing around with loss weights and different initial values for $\delta_{ga}, r_p$
+    - Results: delta→0
+    *other comments
+    ⇒ Would shaking delta_ga be an idea to make sure it doesn’t stay at the value it converges to after only a few iterations already.
+    ⇒ MBH monotonic basin hopping as an alternative to LR scheduling ← **TODO**: look at this briefly
+    ⇒ sundman transform for nondimensionalization of parameters ← **TODO**: look at this briefly
+    ⇒ seaborn plots for determining causalities
+    ⇒ simulating GA part as R2BP as well, so basically having 3 legs ← **TODO**: Why haven’t I done this?*
+- Thrust range question
+*⇒ allowing 360 degrees of  thrust direction around the S/C is fine*
+- Planning
+- ***TODO**: write email to thesis duration committee and read whole Brightspace space about thesis*
+
+### Meeting 19: Week 35 (17-01)
+
+- AI image
+- Planning
+- T2 results
+*⇒ Try training it for an even longer time than I already tried ← **TODO***
+- T3 results
+*⇒ Check whether r_p is w.r.t surface of com of Mars*
+- Started writing
+- From $\Delta V$ to fuel used:
+*⇒ this is not the way to check fuel, you have to integrate the thrust profile of course.*
+    - $\Delta v=I_{s p} \cdot g_0 \cdot \ln \left(\frac{m_0}{m_f}\right)$
+    - $m_{\text {fuel }}=m_0-m_f$
+    - $m_f=m_0 \cdot e^{-\frac{\Delta v}{I_{\text {sp }} s 0}}$
+    - $m_{\text {fuel }}=m_0 \cdot\left(1-e^{-\frac{\Delta v}{T_{s p} \cdot 9_0}}\right)$
+- Planning
+⇒ **TODO**: Have a quick chat with academic counsellors to see what possibilities to extension there are
+⇒ **TODO**: Send thesis duration committee an email about the uploading of the thesis report being at the end of week 47
+
+### 
+
 ### Questions for Supervisor
 
+- Realistic ranges for thrust directions? 0-360 for discovering all possible trajectories? If you have 4 thrusters in prograde, retrograde and radial direction you could achieve this right?
+*⇒ allowing 360 degrees of  thrust direction around the S/C is fine*
 - Do you have any other literature on anything you still want to recommend?
 *⇒ Vallado - FoA book*
 - There’s not much argumentation in Thomas’ paper for the choices he made, is that included in his literature study? Might be nice to share this then with me..?
@@ -594,6 +655,7 @@ Indirect method probably requires some extra studying. Came across a lot of term
 - Tips for when stuck with very specific questions?
 *Discussed various tips for when stuck (asking around, find people that work on somewhat similar problems, rubber duck effect, remember having this is absolutely normal)*
 - Would it be an idea to not limit the maximum allowable thrust
+⇒ Well if I have it at 1.0 N, it still becomes like 0.1 or 0.05 on Average, at least in my T3 technique so I guess having it at 100N or unlimited works the same..? worth a shot though
 
 ### Questions for Thesis boost day
 
