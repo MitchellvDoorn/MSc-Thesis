@@ -1,4 +1,5 @@
 """Backend supported: tensorflow.compat.v1, tensorflow, pytorch, jax, paddle"""
+import os
 import deepxde as dde
 import numpy as np
 # Import tf if using backend tensorflow.compat.v1 or tensorflow
@@ -14,6 +15,9 @@ from tudatpy.kernel.astro import time_conversion
 from tudatpy.kernel.interface import spice
 spice.load_standard_kernels()
 
+dde.config.set_default_float("float64")
+tf.keras.backend.set_floatx('float64')
+
 start_time = time.time()
 
 run_id_number = int(datetime.now().strftime("%Y%m%d%H%M%S"))
@@ -21,13 +25,20 @@ print('Run ID number:', run_id_number)
 
 # Constants
 MU_SUN  = 1.32712440042e20 # [m^3 s^-2] gravitational parameter of Sun
-MU_MARS = 4.2828375816e13 # [m^3 s^-2]
+# MU_MARS = 4.2828375816e13 # [m^3 s^-2]
+# SOI_MARS = 577162256 # [m]
+# r_MARS = 3389500 # [m]
+MU_VENUS = 3.24858592e14 # [m^3 s^-2]
+r_VENUS = 6051800 # [m]
+SOI_VENUS = 616183402 # [m]
+r_VENUS_ATMOSPHERE = 300000 # [m]
+
 # MU_JUPITER = 1.26686534e17
-m0 = 100 # spacecraft initial mass
+m0 = 1000 # spacecraft initial mass
 AU = 149597870700 # [m]
 a = 10 # steepness parmater
 umax = 1.0 # max allowable thrust [N]
-isp = 3000 # specific impulse [s]
+isp = 2000 # specific impulse [s]
 day = 86400 # s
 
 # Non-dimensionalization parameters
@@ -46,9 +57,9 @@ arrival_epoch = GA_epoch + t_leg2
 
 # Loss weights
 dyn_weight = 1
-m_weigth = 1e-5 # mass term
-o_weigth = 1e-7 # objective term
-# ga_dyn_weight = 1e-8 # GA dynamics weight
+m_weigth = 1e-6 # mass term
+o_weigth = 1e-8 # objective term
+ga_dyn_weight = 1 # GA dynamics weight
 
 # create config dictionary
 config_leg1 = {"t0": t0,
@@ -63,8 +74,9 @@ config_leg1 = {"t0": t0,
           "N_test": M,
           "layer_architecture_FNN": [1, 20,20,20,20,20, 7],
           "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 7],
-          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth],
+          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, ga_dyn_weight, o_weigth],
           "mass": True,
+          "run_id_number": run_id_number
           # "N_delta_max": 90 * (np.pi/180),
           # "N_beta_max": 20 * (np.pi/180),
           # "r_p_mars_max" : 0.578e9, # [m]
@@ -75,15 +87,16 @@ config_leg2 = {"t0": t0,
           "length_scale": length_scale,
           "t_scale": t_scale,
           "isp": isp,
-          "m0": 70,
+          "m0": 70, # should be updated dependent on previous leg mf
           "M": M,
           "metrics": ["FinalDr", "FinalDv", "FinalDm", "Fuel used" ],
           "N_train": M,
           "N_test": M,
           "layer_architecture_FNN": [1, 20,20,20,20,20, 7],
           "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 7],
-          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth],
+          "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, ga_dyn_weight, o_weigth],
           "mass": True,
+          "run_id_number": run_id_number
 }
 configs_list = [config_leg1, config_leg2]
 # States
@@ -99,28 +112,28 @@ if final_state2[1] < initial_state2[1]:
     final_state2[1] += 2*np.pi
 
 # Time Grid
-time_grid_ND_leg1 = np.linspace(config_leg2['t0'] / config_leg1['t_scale'], config_leg1['tfinal'] / config_leg1['t_scale'], config_leg1['N_train'], dtype=dde.config.real(np)).reshape(-1, 1)
-time_grid_ND_leg2 = np.linspace(config_leg2['t0'] / config_leg2['t_scale'], config_leg2['tfinal'] / config_leg2['t_scale'], config_leg2['N_train'], dtype=dde.config.real(np)).reshape(-1, 1)
-time_grid_RT_leg1 = time_grid_ND_leg1*config_leg1['t_scale'];   time_grid_RT_leg1 += launch_epoch
+time_grid_train_ND_leg1 = np.linspace(config_leg1['t0'] / config_leg1['t_scale'], config_leg1['tfinal'] / config_leg1['t_scale'], config_leg1['N_train'], dtype=dde.config.real(np)).reshape(-1, 1)
+time_grid_train_ND_leg2 = np.linspace(config_leg2['t0'] / config_leg2['t_scale'], config_leg2['tfinal'] / config_leg2['t_scale'], config_leg2['N_train'], dtype=dde.config.real(np)).reshape(-1, 1)
+time_grid_RT_leg1 = time_grid_train_ND_leg1*config_leg1['t_scale'];   time_grid_RT_leg1 += launch_epoch
 # time_grid_RT_leg2 = time_grid_ND_leg2*config_leg2['t_scale'];   time_grid_RT_leg2 += GA_epoch
-time_grids_list = [time_grid_ND_leg1, time_grid_ND_leg2]
+time_grids_train_ND_list = [time_grid_train_ND_leg1, time_grid_train_ND_leg2]
+time_grids_test_ND_list = [time_grid_train_ND_leg1, time_grid_train_ND_leg2]
+
+
 
 # GA states
-mars_states = mtmf.generate_2D_orbit_from_spice(time_grid_RT_leg1, 'Mars', config_leg1, coordinates='NDradial')
+venus_states = mtmf.generate_2D_orbit_from_spice(time_grid_RT_leg1, 'Venus', config_leg1, coordinates='NDradial')
+r_VENUS_PLUS_ATMOS_ND = (r_VENUS + r_VENUS_ATMOSPHERE) / config_leg1['length_scale']
 
 # tf variables
-# r_p_scaled = tf.Variable(initial_value=0.002*config_leg1['r_p_mars_max']/length_scale1, trainable=True, dtype=tf.float32, name="r_p_scaled")
-# delta_ga = tf.Variable(initial_value=0.3*config_leg1['N_delta_max'], trainable=True, dtype=tf.float32, name="delta_ga")  # Turning angle
-# beta_ga = tf.Variable(initial_value=0.1*config_leg1['N_beta_max'], trainable=True, dtype=tf.float32, name="beta_ga")
-
-v_sc_min_r = tf.Variable(initial_value=final_state1[2], trainable=True, dtype=tf.float32, name="v_sc_min_r")
-v_sc_min_theta = tf.Variable(initial_value=final_state1[3], trainable=True, dtype=tf.float32, name="v_sc_min_theta")
-v_sc_plus_r = tf.Variable(initial_value=initial_state2[2], trainable=True, dtype=tf.float32, name="v_sc_plus_r")
-v_sc_plus_theta = tf.Variable(initial_value=initial_state2[3], trainable=True, dtype=tf.float32, name="v_sc_plus_theta")
-
+v_sc_min_r = tf.Variable(initial_value=0.012256538789428943, trainable=True, dtype=tf.float64, name="v_sc_min_r")
+v_sc_min_theta = tf.Variable(initial_value=1.2665063148797258, trainable=True, dtype=tf.float64, name="v_sc_min_theta")
+v_sc_plus_r = tf.Variable(initial_value=0.24678409603845677, trainable=True, dtype=tf.float64, name="v_sc_plus_r")
+v_sc_plus_theta = tf.Variable(initial_value=1.2342635727439744, trainable=True, dtype=tf.float64, name="v_sc_plus_theta")
+r_p_rescaled = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.float64, name="r_p_rescaled")
 
 ga_trainable_variables  = [v_sc_min_r, v_sc_min_theta, v_sc_plus_r, v_sc_plus_theta]
-trackable_variables     = [v_sc_min_r, v_sc_min_theta, v_sc_plus_r, v_sc_plus_theta]
+tracked_variables  = [v_sc_min_r, v_sc_min_theta, v_sc_plus_r, v_sc_plus_theta, r_p_rescaled]
 
 # Callback
 class VariableValueWithHistory(dde.callbacks.VariableValue):
@@ -139,9 +152,8 @@ class VariableValueWithHistory(dde.callbacks.VariableValue):
     def get_history(self):
         return self.history
 
-var_callback = VariableValueWithHistory(var_list=trackable_variables, period=1, precision=4)
-
-def loss_function(t, y):
+var_callback = VariableValueWithHistory(var_list=tracked_variables, period=1, precision=4)
+def loss(t, y):
     x1_leg1 = y[:, 0:1]
     theta_leg1 = y[:, 1:2]
     x2_leg1 = y[:, 2:3]
@@ -167,6 +179,14 @@ def loss_function(t, y):
     RHS_x3_leg1 = - (x2_leg1 * x3_leg1) / x1_leg1 + (config_leg1['t_scale'] ** 2 / config_leg1['length_scale']) * ut_leg1 / m_leg1
     RHS_m_leg1 = -T * config_leg1['t_scale'] / (isp * 9.81)
 
+    # penalize if r_p < r_planet
+    r_p = (mtmf.ga_check(v_sc_min_r, v_sc_min_theta, v_sc_plus_r, v_sc_plus_theta, venus_states, MU_VENUS, configs_list) / config_leg1['length_scale']) * 1e5
+    # tf.print(r_p_ND)
+    r_p_rescaled.assign(r_p * config_leg1['length_scale'] / 1e5)
+    r_diff = r_VENUS_PLUS_ATMOS_ND * 1e5 - abs(r_p)
+    r_diff_normalized = r_diff
+    r_p_penalty = tf.maximum(tf.constant(0.0, dtype=tf.float64), r_diff_normalized)
+
     # Return the residuals
     return [
         dx1_leg1_dt - RHS_x1_leg1,
@@ -174,10 +194,8 @@ def loss_function(t, y):
         dx2_leg1_dt - RHS_x2_leg1,
         dx3_leg1_dt - RHS_x3_leg1,
         dm_leg1_dt - RHS_m_leg1,
+        tf.expand_dims(r_p_penalty, axis=0)  # Fix dimension issue
         ]
-
-# N_d = config_leg1['N_d_max'] * 2*tf.math.sigmoid(delta_ga) -1 # To make sigmoid range [-1, 1]
-# N_beta = config_leg1['N_beta_max'] * 2*tf.math.sigmoid(beta_ga) -1 # To make sigmoid range [-1, 1]
 def constraint_layer1(t, y):
     # Leg 1 scaling functions
     c1 = tf.math.exp(-a * (t - t0))
@@ -242,37 +260,47 @@ def constraint_layer2(t, y):
         m
     ], axis=1)
     return output
+
 constraint_layers_list = [constraint_layer1, constraint_layer2]
 
-
-#TODO implement minimum r_p constraint
-
-lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
+lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000), (1e-6, 5000), (1e-7, 6000)]
 
 
 # delta_t = (config['tfinal']/config['t_scale'] - config['t0']/config['t_scale']) / config['N_train'];    std = 0.2 * delta_t
 # mtmf.restarter (config, loss_function, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, plot=True, save=True, N_attempts=60, run_id_number=run_id_number)
 # losshistory, train_state = mtmf.single_run_with_restart(config_leg1, loss_function, constraint_layer, time_grid, lr_schedule, final_state1, initial_state2, ga_trainable_variables, var_callback,
 #                                                         configs_list, GA_point=None, threshold=10.0, train_distribution="uniform", std=None, save=True, seed=None) # fill in seed=None for time dependent seed
-losshistory1, train_state1, losshistory2, train_state2 = mtmf.parallel_pcnn_training(configs_list, loss_function, constraint_layers_list, time_grids_list, lr_schedule, final_state1, initial_state2, ga_trainable_variables,
-                                                                                     var_callback, threshold=5.0, train_distribution="uniform", std=None, save=False, seed=None) # fill in seed=None for time dependent seed
-
+time_grid_new1, losshistory1, train_state1, time_grid_new2, losshistory2, train_state2 = mtmf.parallel_pcnn_training(configs_list, loss, constraint_layers_list, time_grids_train_ND_list, time_grids_test_ND_list, lr_schedule, final_state1, initial_state2, ga_trainable_variables,
+                                                                                     var_callback, resampling=False, resampling_epoch=55000, extra_points_amount=200, LBFGS=True, threshold=5.0, train_distribution="uniform", std=None, save=True, seed=20250212221317) # 20250211152648 fill in seed=None for time dependent seed
+# time_grids_list_new = [time_grid_new1, time_grid_new2]
 var_history = var_callback.get_history()
-# print("Tracked history of variable values:", var_history)
 
-new_train_state_best_y = np.hstack((train_state1.best_y, train_state2.best_y))
+states1 = np.loadtxt('test_data1.dat')[:, 1:] # without time column 0
+states2 = np.loadtxt('test_data2.dat')[:, 1:] # without time column 0
+losshistory_loaded1 = np.loadtxt('loss1.dat')
+losshistory_loaded2 = np.loadtxt('loss2.dat')
+metrics_loaded1 = np.loadtxt('metrics1.dat')
+metrics_loaded2 = np.loadtxt('metrics2.dat')
+
+folder_path = f"Saved_plots/{run_id_number}"
+os.makedirs(folder_path, exist_ok=True)
+
+losshistory_loaded_list = [losshistory_loaded1, losshistory_loaded2]
+metrics_loaded_list = [metrics_loaded1, metrics_loaded2]
+
+new_train_state_best_y = np.hstack((states1, states2))
 
 # # Verification
-mtmf.verify_run_sp2(new_train_state_best_y, configs_list, time_grids_list, ga_bodies=None, showplot=True, saveplots=True)
+Dr = mtmf.verify_run_sp2(new_train_state_best_y, losshistory_loaded_list, metrics_loaded_list, configs_list, time_grids_test_ND_list, ga_bodies=None, showplot=True, saveplots=True)
 
 # plots
-plots.plot_trajectory_radialND_to_cartesianND_sp2_T3(time_grids_list, new_train_state_best_y, thrust_scale=1.0, r_start = initial_state1[0]*length_scale, r_ga = final_state1[0]*length_scale,
+plots.plot_trajectory_radialND_to_cartesianND_sp2_T3(time_grids_test_ND_list, new_train_state_best_y, thrust_scale=0.5, r_start = initial_state1[0]*length_scale, r_ga = final_state1[0]*length_scale,
                                                   r_target = final_state2[0]*length_scale, N_arrows=100, configs_list=configs_list)
-plots.plot_states_T3(time_grids_list, new_train_state_best_y, config_leg1)
-plots.plot_loss(losshistory1)
-plots.plot_loss(losshistory2)
-variable_names = ['v_sc_min_r', 'v_sc_min_theta', 'v_sc_plus_r', 'v_sc_plus_theta']
-plots.plot_variable_history(var_history, variable_names=variable_names)
+plots.plot_states_T3(time_grids_test_ND_list, new_train_state_best_y, configs_list)
+plots.plot_loss(losshistory_loaded_list[0], configs_list[0])
+plots.plot_loss(losshistory_loaded_list[1], configs_list[1])
+variable_names = ['v_sc_min_r', 'v_sc_min_theta', 'v_sc_plus_r', 'v_sc_plus_theta', 'r_p_rescaled']
+plots.plot_variable_history(var_history, configs_list, variable_names=variable_names)
 
 plt.show()
 
@@ -280,20 +308,49 @@ end_time = time.time()
 print(f"Entire run took {np.round(end_time-start_time, 1)} s")
 
 
-# np.savetxt(
-#     "predicted_states.csv",       # File name
-#     train_state.best_y,           # Array to save
-#     delimiter=",",                # Delimiter (comma-separated)
-#     fmt="%.6f",                   # Floating-point format with 6 decimal places
-#     header="r, theta, v_r, v_theta, u_r, u_theta, m, r, theta, v_r, v_theta, u_r, u_theta, m",  # Column headers
-#     comments=""                   # No '#' before the header
-# )
 
-v_r_final_leg_1       = train_state1.best_y[:,2][-1]
-v_theta_final_leg_1   = train_state1.best_y[:,3][-1]
-v_r_initial_leg_2     = train_state2.best_y[:,2][0]
-v_theta_initial_leg_2 = train_state2.best_y[:,3][0]
-mtmf.ga_delta_v(v_r_final_leg_1, v_theta_final_leg_1, v_r_initial_leg_2, v_theta_initial_leg_2, mars_states, delta_ga=None)
+
+
+
+
+# GA check
+v_r_final_leg_1       = states1[:,2][-1]
+v_theta_final_leg_1   = states1[:,3][-1]
+v_r_initial_leg_2     = states2[:,2][0]
+v_theta_initial_leg_2 = states2[:,3][0]
+mtmf.ga_summary(v_r_final_leg_1, v_theta_final_leg_1, v_r_initial_leg_2, v_theta_initial_leg_2, venus_states, MU_VENUS, configs_list, delta_ga=None)
+mtmf.ga_check(v_r_final_leg_1, v_theta_final_leg_1, v_r_initial_leg_2, v_theta_initial_leg_2, venus_states, MU_VENUS, configs_list, delta_ga=None)
+
+t1 = time_grids_test_ND_list[0];    t1_reshaped = t1.reshape(-1, 1);    states1_with_time_grid = np.concatenate((t1_reshaped, states1), axis=1)
+leg1_states_cartesian = coordinates_transformation_functions.radial_to_cartesian(states1_with_time_grid, configs_list[0])
+t2 = time_grids_test_ND_list[1];    t2_reshaped = t2.reshape(-1, 1);    states2_with_time_grid = np.concatenate((t2_reshaped, states1), axis=1)
+leg2_states_cartesian = coordinates_transformation_functions.radial_to_cartesian(states2_with_time_grid, configs_list[1])
+
+print('r_VENUS              : ', r_VENUS)
+print('r_VENUS+atmosphere   : ', r_VENUS + r_VENUS_ATMOSPHERE)
+print('r_p_check            : ', int(mtmf.ga_check(v_r_final_leg_1, v_theta_final_leg_1, v_r_initial_leg_2, v_theta_initial_leg_2, venus_states, MU_VENUS, configs_list, delta_ga=None).numpy()))
+print('SOI_VENUS            : ', SOI_VENUS)
+print('Total fuel used:', config_leg1['m0'] - states2[-1,-1] , 'kg')
+
+# Hodographic shaping GA check
+HS_leg1_ga_states_cartesian = np.array([[0.0, 4.39819421e+10,  9.85277274e+10, -3.76816085e+04,  1.65721292e+04, 0.0, 0.0, 0.0]])
+HS_leg1_ga_states_radial = coordinates_transformation_functions.cartesian_to_radial(HS_leg1_ga_states_cartesian, config_leg1)
+HS_leg2_ga_states_cartesian = np.array([[0.0, 4.39007793e+10,  9.85790341e+10, -3.24427060e+04,  2.04904135e+04, 0.0, 0.0, 0.0]])
+HS_leg2_ga_states_radial = coordinates_transformation_functions.cartesian_to_radial(HS_leg2_ga_states_cartesian, config_leg2)
+
+r_p_HS = mtmf.ga_check(HS_leg1_ga_states_radial[0][1], HS_leg1_ga_states_radial[0][2], HS_leg2_ga_states_radial[0][1], HS_leg2_ga_states_radial[0][2], venus_states, MU_VENUS, configs_list, delta_ga=None)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

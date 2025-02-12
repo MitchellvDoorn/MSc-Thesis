@@ -14,6 +14,9 @@ from tudatpy.kernel.astro import time_conversion
 from tudatpy.kernel.interface import spice
 spice.load_standard_kernels()
 
+tf.keras.backend.set_floatx('float32')
+dde.config.real.set_float32()
+
 start_time = time.time()
 
 run_id_number = int(datetime.now().strftime("%Y%m%d%H%M%S"))
@@ -63,10 +66,11 @@ config_leg1 = {"t0": t0,
           "metrics": ["FinalDr", "FinalDv", "FinalDm", "Fuel used" ],
           "N_train": M,
           "N_test": M,
-          "layer_architecture_FNN": [1, 35,35,35,35,35,35, 14],
+          "layer_architecture_FNN": [1, 45,45,45,45,45,45, 14],
           "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 14],
           "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth],
           "mass": True,
+          "run_id_number": run_id_number,
           "N_delta_max": 90 * (np.pi/180),
           # "N_beta_max": 20 * (np.pi/180),
           "r_p_mars_max" : 0.578e9, # [m]
@@ -88,6 +92,8 @@ config_leg2 = {"t0": t0,
           # "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 14],
           "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth],
           "mass": True,
+          "run_id_number": run_id_number
+
           # "N_delta_max": 90 * (np.pi/180), # [rad]
           # "N_beta_max": 20 * (np.pi/180), # [rad]
           # "r_p_mars_max" : 0.578e9, # [m]
@@ -341,8 +347,8 @@ def constraint_layer(t, y):
 #TODO tudat mass leg 2 is weird <-gefixt
 # check de hypothesis van thomas over loss minimizen, hoe werkt het eigenlijk?
 # nu heb je initial states, dynamically valid, fuel dat omstebeurt word veranderd, eerdes had je alleen dynamically valid vs fuel
-# Final state Ceres is weird...
-lr_schedule = [(1e-2, 3000), (1e-3, 5000)]#, (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
+
+lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
 
 def single_run_with_restart(config, pde, constraint_layer, time_grid, lr_schedule, final_state1, initial_state2, ga_trainable_variables, callbacks=None, configs_list=None,
                             GA_point=None, threshold=5.0, N_attempts=50, train_distribution="uniform", std=None, plot=True, save=False, seed=None):
@@ -398,15 +404,15 @@ var_history = var_callback.get_history()
 # print("Tracked history of variable values:", var_history)
 
 # # Verification
-mtmf.verify_run_sp2_T2(train_state.best_y, configs_list, time_grid, ga_bodies=None, showplot=True, saveplots=True)
+# mtmf.verify_run_sp2_T2(train_state.best_y, configs_list, time_grid, ga_bodies=None, showplot=True, saveplots=True)
 
 # plots
 plots.plot_trajectory_radialND_to_cartesianND_sp2_T2(time_grid, train_state.best_y, thrust_scale=0.1, r_start = initial_state1[0], r_ga = final_state1[0],
                                                   r_target = final_state2[0], N_arrows=100, configs_list=configs_list)
-plots.plot_states(time_grid, train_state.best_y, config_leg1)
-plots.plot_loss(losshistory)
+plots.plot_states_T1(time_grid, train_state.best_y, config_leg1)
+plots.plot_loss_T2(losshistory)
 variable_names = ['delta_ga', 'r_p_scaled', 'v_sc_min_r', 'v_sc_min_theta', 'v_sc_plus_r', 'v_sc_plus_theta']
-plots.plot_variable_history(var_history, variable_names=variable_names)
+# plots.plot_variable_history(var_history, variable_names=variable_names)
 
 plt.show()
 
@@ -423,11 +429,11 @@ print(f"Entire run took {np.round(end_time-start_time, 1)} s")
 #     comments=""                   # No '#' before the header
 # )
 
-v_r_final_leg_1       = train_state.best_y[:,2][-1]
-v_theta_final_leg_1   = train_state.best_y[:,3][-1]
-v_r_initial_leg_2     = train_state.best_y[:,9][0]
-v_theta_initial_leg_2 = train_state.best_y[:,10][0]
-mtmf.ga_delta_v(v_r_final_leg_1, v_theta_final_leg_1, v_r_initial_leg_2, v_theta_initial_leg_2, mars_states, delta_ga=None)
+# v_r_final_leg_1       = train_state.best_y[:,2][-1]
+# v_theta_final_leg_1   = train_state.best_y[:,3][-1]
+# v_r_initial_leg_2     = train_state.best_y[:,9][0]
+# v_theta_initial_leg_2 = train_state.best_y[:,10][0]
+# mtmf.ga_delta_v(v_r_final_leg_1, v_theta_final_leg_1, v_r_initial_leg_2, v_theta_initial_leg_2, mars_states, delta_ga=None)
 
 
 

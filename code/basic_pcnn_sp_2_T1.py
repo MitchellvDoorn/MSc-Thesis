@@ -14,6 +14,10 @@ from tudatpy.kernel.astro import time_conversion
 from tudatpy.kernel.interface import spice
 spice.load_standard_kernels()
 
+tf.keras.backend.set_floatx('float32')
+dde.config.real.set_float32()
+
+
 start_time = time.time()
 
 run_id_number = int(datetime.now().strftime("%Y%m%d%H%M%S"))
@@ -66,7 +70,8 @@ config = {"t0": t0,
           "layer_architecture_FNN": [1, 20, 20, 20, 20, 20, 7],
           "layer_architecture_PFNN": [1, [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], [10,10,10,10,10,10,10], 7],
           "loss_weights": [dyn_weight, dyn_weight, dyn_weight, dyn_weight, m_weigth, o_weigth],
-          "mass": True
+          "mass": True,
+          "run_id_number": run_id_number
 }
 
 # States
@@ -89,7 +94,7 @@ time_grid = uniform_points
 
 t_focus = GA_point  # Target focus point
 focus_width = (config['tfinal'] / config['t_scale']) * 0.02  # Define a small range around the focus point
-extra_points_amount = 10
+extra_points_amount = 250
 extra_points = np.linspace(t_focus - focus_width, t_focus + focus_width, extra_points_amount).reshape(-1, 1)
 all_points = np.vstack((uniform_points, extra_points))
 time_grid_mars = np.sort(all_points.astype(np.float32), axis=0)
@@ -105,30 +110,13 @@ r_p_scaled = tf.Variable(initial_value=GA_state[0]+0.001, trainable=False, dtype
 trainable_variables  = [r_p_scaled]
 
 def loss_function(t, y):
-    x1 = tf.maximum(1e-6, y[:, 0:1])
-    theta2 = tf.maximum(1e-6, y[:, 1:2])
-    x2 = tf.maximum(1e-6, y[:, 2:3])
-    x3 = tf.maximum(1e-6, y[:, 3:4])
-    ur = tf.clip_by_value(y[:, 4:5], 1e-8, umax)
-    ut = tf.clip_by_value(y[:, 4:5], 1e-8, umax)
-    m = tf.maximum(1e-2, y[:, 6:7])
-
-    # tf.print('min:')
-    # tf.print("y[:, 0:1]:", tf.math.reduce_min (y[:, 0:1]), summarize=-1)
-    # tf.print("y[:, 1:2]:", tf.math.reduce_min (y[:, 1:2]), summarize=-1)
-    # tf.print("y[:, 2:3]:", tf.math.reduce_min (y[:, 2:3]), summarize=-1)
-    # tf.print("y[:, 3:4]:", tf.math.reduce_min (y[:, 3:4]), summarize=-1)
-    # tf.print("y[:, 4:5]:", tf.math.reduce_min (y[:, 4:5]), summarize=-1)
-    # tf.print("y[:, 5:6]:", tf.math.reduce_min (y[:, 5:6]), summarize=-1)
-    # tf.print("y[:, 6:7]:", tf.math.reduce_min (y[:, 6:7]), summarize=-1)
-    # tf.print('max:')
-    # tf.print("y[:, 0:1]:", tf.math.reduce_max(y[:, 0:1]), summarize=-1)
-    # tf.print("y[:, 1:2]:", tf.math.reduce_max(y[:, 1:2]), summarize=-1)
-    # tf.print("y[:, 2:3]:", tf.math.reduce_max(y[:, 2:3]), summarize=-1)
-    # tf.print("y[:, 3:4]:", tf.math.reduce_max(y[:, 3:4]), summarize=-1)
-    # tf.print("y[:, 4:5]:", tf.math.reduce_max(y[:, 4:5]), summarize=-1)
-    # tf.print("y[:, 5:6]:", tf.math.reduce_max(y[:, 5:6]), summarize=-1)
-    # tf.print("y[:, 6:7]:", tf.math.reduce_max(y[:, 6:7]), summarize=-1)
+    x1 = y[:, 0:1]
+    theta2 = y[:, 1:2]
+    x2 = y[:, 2:3]
+    x3 = y[:, 3:4]
+    ur = y[:, 4:5]
+    ut = y[:, 5:6]
+    m = y[:, 6:7]
 
     # Thrust magnitude
     T = tf.reshape(tf.norm(y[:, 4:6], axis=1), (-1, 1))
@@ -144,7 +132,7 @@ def loss_function(t, y):
         theta3 = tf.atan((r2 * tf.sin(d_theta1)) / (r1 - r2 * tf.cos(d_theta1)))
         theta4 = theta3 + theta1
 
-        a_mars = (MU_MARS * t_scale ** 2 / length_scale ** 3) * r_sc_m_magnitude ** (-2)
+        a_mars =  (MU_MARS * t_scale ** 2 / length_scale ** 3) * r_sc_m_magnitude ** (-2)
 
         # Decompose acceleration vectors to polar coordinates with Sun at the origin
         d_theta_2 = theta4 - theta2
@@ -226,20 +214,20 @@ def constraint_layer(t, y):
     return output
 
 
-lr_schedule = [(1e-2, 3000), (1e-3, 5000)]#, (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
+lr_schedule = [(1e-2, 3000), (1e-3, 5000), (1e-4, 10000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (5e-3, 4000), (1e-4, 5000), (1e-5, 6000)]
 
 delta_t = (config['tfinal']/config['t_scale'] - config['t0']/config['t_scale']) / config['N_train'];    std = 0.2 * delta_t
 # mtmf.restarter (config, loss_function, constraint_layer, lr_schedule, train_distribution="perturbed_uniform_tf", std=None, plot=True, save=True, N_attempts=60, run_id_number=run_id_number)
-losshistory, train_state, time_grid = mtmf.single_run_with_restart_tp_resampling(config, loss_function, constraint_layer, time_grid, lr_schedule, trainable_variables, GA_point, threshold=5.0,
-                                                                                 train_distribution="uniform", std=None, save=True, seed=None) # fill in seed=None for time dependent seed
+losshistory, train_state, time_grid = mtmf.single_run_with_restart_tp_resampling_at_ga(config, loss_function, constraint_layer, time_grid, lr_schedule, extra_points_amount, trainable_variables, GA_point,
+                                                                                       adding_tp_iteration=40000,threshold=100.0, train_distribution="uniform", std=None, save=True, seed=None) # fill in seed=None for time dependent seed
 
 # # Verification
 # # mtmf.verify_basic_pcnn(f'{run_id_number}_FNN')
 # mtmf.verify_run(train_state.best_y, losshistory, config, time_grid, ga_bodies=None, showplot=True, saveplots=True)
 # plots
-plots.plot_trajectory_radialND_to_cartesianND_sp2_T1(time_grid, train_state.y_pred_test, mars_states, GA_index, thrust_scale=0.1, r_start = initial_state[0], r_ga = GA_state[0], r_target = final_state[0], N_arrows=100, config=config)
-# plots.plot_states(time_grid, train_state.best_y, config)
-plots.plot_loss(losshistory)
+plots.plot_trajectory_radialND_to_cartesianND_sp2_T1(time_grid, train_state.best_y, mars_states, GA_index, thrust_scale=0.1, r_start = initial_state[0], r_ga = GA_state[0], r_target = final_state[0], N_arrows=100, config=config)
+plots.plot_states_T1(time_grid, train_state.best_y, config)
+plots.plot_loss_T1(losshistory)
 plt.show()
 
 end_time = time.time()
