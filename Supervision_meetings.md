@@ -613,22 +613,85 @@ Notes I taken after the meeting:
 - T2 results
 *⇒ Try training it for an even longer time than I already tried ← **TODO***
 - T3 results
-*⇒ Check whether r_p is w.r.t surface of com of Mars*
+*⇒ Check whether `r_p` is w.r.t surface of com of Venus ← **TODO***
 - Started writing
 - From $\Delta V$ to fuel used:
-*⇒ this is not the way to check fuel, you have to integrate the thrust profile of course.*
+*⇒ this is not the way to check fuel, you have to integrate the thrust profile of course. ← **TODO***
     - $\Delta v=I_{s p} \cdot g_0 \cdot \ln \left(\frac{m_0}{m_f}\right)$
     - $m_{\text {fuel }}=m_0-m_f$
-    - $m_f=m_0 \cdot e^{-\frac{\Delta v}{I_{\text {sp }} s 0}}$
-    - $m_{\text {fuel }}=m_0 \cdot\left(1-e^{-\frac{\Delta v}{T_{s p} \cdot 9_0}}\right)$
+    - $m_f=m_0 \cdot e^{-\frac{\Delta v}{I_{\text {sp }} g_0}}$
+    - $m_{\text {fuel }}=m_0 \cdot\left(1-e^{-\frac{\Delta v}{I_{s p} \cdot 9_0}}\right)$
 - Planning
 ⇒ **TODO**: Have a quick chat with academic counsellors to see what possibilities to extension there are
 ⇒ **TODO**: Send thesis duration committee an email about the uploading of the thesis report being at the end of week 47
 
-### 
+### Meeting 20: Week 37 (28-01)
+
+- AI image
+- Plan
+**TODO** → send kevin screenshot of (nominal) plan incl. dates of milestones
+- `r_p` constraint (w.r.t. surface of Venus)
+    - Still to do: analysis on scaling and loss weight (grid searches?)
+- Integrating HS thrust profile + HS vs PCNN comparison
+*⇒ would we have expected this? ← **TODO** look at whether this was expected or not, I might have done that already, but in that case I forgot.
+Furthermore, always include this step - checking whether the results was to be expected or not - in your work. Never just blindly assume the numbers coming out of your simulation are correct. I realize this, but it doesn’t hurt to note it down again.*
+- RAR
+    - No lower loss terms or metrics, maybe more efficiency (faster convergence) though
+    *⇒ Still do a proper simulation so that you can report on it and draw a conclusion (and have proper evidence supporting that conclusion)*
+- SP3 efforts
+    - t_ga to fuel usage / delta V
+    - Varying t_ga → Hoping for quick decrease in dynamics loss terms
+    - Question: Other ways of evaluating fuel usage/ Delta V for specific initial/final state and TOF → solving Lambert problem?
+    *⇒ not sure if there is such a thing. Lambert arc / simpson flanagan could work?? but another problem might be to connect the positions of the arcs and that’s a problem which you might now want to include in the scope of this thesis*
+- Contacting ‘experts’
+    - Show questions to discuss
+- More writing!
+- Thesis extension possibilities
+⇒ Chat with academic counsellors
+⇒ Week 47 is indeed uploading into repository date confirmation
+
+### Meeting 21: Week 38 (06-02)
+
+- ~~AI image~~
+- Plan
+- HS thrust profile: $\Delta V$ with ideal rocket equation vs integrating thrust profile: 435 kg vs 415kg **(~5%)** or 43.5kg vs 41.5kg **(also  ~5%)**
+*⇒ would we have expected this? Yes because now mass changes throughout trajectory*
+- Residual based adaptive sampling of training points
+    - RAD best performance
+    - Same seed, M=1000,200,100,50,10, with and without resampling comparison
+    - Setting up big simulation
+- Spend time on:
+    - J.B. Stiasny (conversation + document)
+    - DelftBlue
+    - Writing
+    - Variable t_ga (sp3)
+- Mamba (built on top of conda)
+
+### Meeting 22: Week 39 (14-02)
+
+- AI image
+- Writing
+    - Question about conciseness of the paper
+    *⇒ A good technique would be to keep it as short as possible, then add things if you still have space left. The other way around; cutting things, is probably harder to do.*
+    - Feedback already?
+    *⇒ short feedback cycle is okay, make sure to ask precisely what type of feedback you want.
+    ⇒ finding other people to read your text is good too, maybe let every person only read a few pages*
+- J.B. Stiasny (conversation + document)
+*⇒ look at outputs before transformation*
+- Debugging
+*⇒ Told Kevin I spent like 1.5 days doing this.*
+- Alternative constraint functions
+*⇒ showed results of other constraint functions*
+- plan
+*⇒ Discussed the plan. **TODO**: ask academic counsellors for advice on how much extension to ask for*
+- Next up:
+    - Get DefltBlue working again
+    - Mostly writing - V&V
 
 ### Questions for Supervisor
 
+- **The paper needs to be concise, but should you explain why you made certain choices (like why polar coordinates and not cartesian coordinates, maybe very briefly?**
+*⇒ A good technique would be to keep it as short as possible, then add things if you still have space left. The other way around; cutting things, is probably harder to do. Sometimes explaining a choice can be desired, e.g. if it’s very important to the research.*
 - Realistic ranges for thrust directions? 0-360 for discovering all possible trajectories? If you have 4 thrusters in prograde, retrograde and radial direction you could achieve this right?
 *⇒ allowing 360 degrees of  thrust direction around the S/C is fine*
 - Do you have any other literature on anything you still want to recommend?
