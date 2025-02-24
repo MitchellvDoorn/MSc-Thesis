@@ -688,6 +688,57 @@ Furthermore, always include this step - checking whether the results was to be e
     - Get DefltBlue working again
     - Mostly writing - V&V
 
+### Meeting 23: Week 41 (24-02)
+
+- AI image
+- DelftBlue adventures
+    - Modules available on DelftBlue
+    *⇒ The first approach I tried was to make use of the modules that are pre-installed on DelftBlue. You then have to make sure that before running your python script, you load the required modules in with `module load [LIBRARY]`. There are however only certain specific versions available on DelftBlue, so making sure your code works with these versions can become a hassle. For example, for my code I used a specific version of Tensorflow-probability, which only worked with a specific version of Tensorflow, and that specific version of Tensorflow was not available on DelftBlue. I would then have to rewrite my code such that it was compatible with previous versions of  Tensorflow and Tensorflow-probability. Furthermore all (pre-installed) libraries you need to use need to be compatible with eachother. You would hope they are, but I haven’t checked wether all pre-installed libraries on DelftBlue are compatible with eachother. If I remember correctly, I had to install Tensorflow-probability on DelftBlue because that was not available on DelftBlue in any of the standard libaries and that again caused compatibility issues with other libraries (one example was matplotlib). At this point it became a puzzle and there is such a tool called conda that is made to solve that puzzle for you, so you would be better off creating a virtual environment using conda and let conda solve the puzzle for you. So that is what I did. In general, what the people behind DelfBlue recommend is when you have a simple code that does not use too many libraries, try to get it working with the pre-installed libraries, but if you have a somewhat complicated environment (which you have when you install tudat via the .yaml file from the tudat website), then install your own virtual environment on DelftBlue.*
+    - Own virtual environment
+        - Making .yaml file from existing environment → Solving environment takes long
+        *⇒ One way of copying your own virtual environment is to make a .yaml file from your existing environment. You can do this by, with your conda environment activated, running the following command to generate dependency yaml file:  `*conda env export > environment.yml`. *I did this, but the .yaml file became extremely large (almost 380 lines, no joke) and solving the environment on DelftBlue took hours, and I stopped it after 3 hours.*
+        - Making completely new environment → works if…
+        *⇒ I also made a new environment from a simpler/shorter .yaml file. To get my code working in this new environment I had to debug part of my code because I had made some changes to the DeepXDE library. Then I copied this .yaml file to my personal storage space on DelftBlue and created a new environment on DelftBlue with the miniconda3 that is installed on DelftBlue already. This worked fine except for the fact that apparently still some DelftBlue standard libraries were found before the libraries in my own environment and that caused some compatibility issues again. I had to make sure that the libraries in my conda environment were found before the DelftBlue standard libraries. The way you can do this is by adding the following line right after activating your conda environment:* `export LD_LIBRARY_PATH=/home/$USER/miniconda3/envs/msc_thesis_tudat_tf_deepxde3/lib:$LD_LIBRARY_PATH`. The final job script became:
+        
+        ```python
+        #!/bin/bash
+        
+        #SBATCH --job-name="basic_pcnn_delftblue"
+        #SBATCH --time=00:10:00
+        #SBATCH --partition=compute-p1
+        #SBATCH --ntasks=1
+        #SBATCH --cpus-per-task=16
+        #SBATCH --mem-per-cpu=3G
+        #SBATCH --account=education-ae-msc-ae
+        
+        # Load Miniconda and activate the environment
+        module load 2024r1 # don't think this is needed anymore
+        module load miniconda3
+        conda activate /home/mitchellvandoo/miniconda3/envs/msc_thesis_tudat_tf_deepxde3
+        
+        # Set DeepXDE backend
+        export DDE_BACKEND=tensorflow
+        export LD_LIBRARY_PATH=/home/$USER/miniconda3/envs/msc_thesis_tudat_tf_deepxde3/lib:$LD_LIBRARY_PATH
+        
+        # Run the main Python script
+        srun python3 basic_pcnn_delftblue.py > basic_pcnn_delftblue.log
+        ```
+        
+    - GPU training
+        - Windows Native
+        *⇒ TensorFlow **`2.10`** was the **last** TensorFlow release that supported GPU on native-Windows. Starting with TensorFlow **`2.11`**, you will need to install [TensorFlow in WSL2](https://tensorflow.org/install/pip#windows-wsl2), or install **`tensorflow`** or **`tensorflow-cpu`** and, optionally, try the [TensorFlow-DirectML-Plugin](https://github.com/microsoft/tensorflow-directml-plugin#tensorflow-directml-plugin-), so make sure that you either use TensorFlow 2.10 or install Windows WSL2 when you are on windows. More info can be found [here](https://www.tensorflow.org/install/pip#windows-native).*
+        - Only pays of for larger NNs
+        *⇒ GPU training does pay off when you have very large matrix multiplications, because matrix multiplications is what GPUs can do better than CPUs. What you also need to take into account when using your GPU is that data transfer between the CPU and GPU can be a bottleneck. The time it takes to move data to and from the GPU's memory can offset the speed gains from faster computation if not managed efficiently. Therefore, it's crucial to minimize these data transfers by keeping data on the GPU as much as possible during training. You might have heard about the term ‘overhead’. This [**data transfer bottleneck**](https://developer.nvidia.com/blog/machine-learning-frameworks-interoperability-part-2-data-loading-and-data-transfer-bottlenecks/?utm_source=chatgpt.com) is a specific type of **overhead,** whereas overhead is the  more general term referring to the extra processing time, memory, or resources required to perform a specific task beyond the actual work needed for the task itself.*
+    - CPU training
+        - Code parallelization
+        *⇒ In order to use all computing resources on DelftBlue, you need to make sure your code can run in parallel. If you don’t do this, your code will just use a single core, even if you request more cores. Therefore I am now going to parallelize my code.*
+- Thesis extension
+⇒ The academic counsellors advised to file for an exemption closer to the end of your thesis, because then you can better estimate the amount of extra weeks you need. Filing for a second exemption would be possible though.
+*⇒ What I haven’t done yet is to ask the thesis duration committee too ← **TODO***
+- Writing V&V
+    - Feedback
+    *⇒ I want to do some more writing on the V&V phase before asking feedback, so I can include that too in the initial short round of feedback.*
+
 ### Questions for Supervisor
 
 - **The paper needs to be concise, but should you explain why you made certain choices (like why polar coordinates and not cartesian coordinates, maybe very briefly?**
